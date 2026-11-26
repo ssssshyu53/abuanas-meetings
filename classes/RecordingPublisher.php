@@ -13,6 +13,10 @@ class RecordingPublisher
             @mkdir($dir, 0775, true);
         }
         $partFile = $dir . '/room_' . $roomId . '.part.mp3';
+        $curSize = is_file($partFile) ? (int)filesize($partFile) : 0;
+        if (($curSize + strlen($binData)) > 120 * 1024 * 1024) {
+            return ['ok' => false, 'error' => 'تجاوز التسجيل الحد الأقصى المسموح (120MB)'];
+        }
         $written = file_put_contents($partFile, $binData, FILE_APPEND | LOCK_EX);
         return [
             'ok'    => $written !== false,

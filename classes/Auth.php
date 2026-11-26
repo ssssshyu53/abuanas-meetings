@@ -138,6 +138,24 @@ class Auth
         @session_destroy();
     }
 
+    public static function changePassword(int $userId, string $currentPassword, string $newPassword): array
+    {
+        if (strlen($newPassword) < 8) {
+            return ['ok' => false, 'error' => 'كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل'];
+        }
+        $db = Database::getInstance()->connect();
+        $st = $db->prepare('SELECT id, password_hash FROM users WHERE id = ? LIMIT 1');
+        $st->execute([$userId]);
+        $u = $st->fetch();
+        if (!$u || !password_verify($currentPassword, (string)$u['password_hash'])) {
+            return ['ok' => false, 'error' => 'كلمة المرور الحالية غير صحيحة'];
+        }
+        $upd = $db->prepare('UPDATE users SET password_hash = ? WHERE id = ?');
+        $upd->execute([password_hash($newPassword, PASSWORD_BCRYPT), $userId]);
+        session_regenerate_id(true);
+        return ['ok' => true];
+    }
+
     public static function setGuestName(string $name): string
     {
         $clean = mb_substr(trim(strip_tags($name)), 0, 50);

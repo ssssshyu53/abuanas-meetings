@@ -11,13 +11,15 @@ if (Auth::isLoggedIn()) {
 
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (!vsVerifyCsrf()) {
+    if (!vsRateLimit('login', 10, 300)) {
+        $error = 'تم تجاوز الحد المسموح لمحاولات الدخول، انتظر قليلاً ثم حاول مجدداً.';
+    } elseif (!vsVerifyCsrf()) {
         $error = 'انتهت صلاحية الجلسة، حاول مرة أخرى.';
     } else {
         $res = Auth::login((string)($_POST['email'] ?? ''), (string)($_POST['password'] ?? ''));
         if ($res['ok']) {
             $next = trim((string)($_GET['next'] ?? ''));
-            if ($next !== '' && str_starts_with($next, '/')) {
+            if ($next !== '' && str_starts_with($next, '/') && !str_starts_with($next, '//') && !str_contains($next, '\\')) {
                 vsRedirect($next);
             }
             vsRedirect(SITE_URL . '/dashboard.php');
@@ -55,8 +57,10 @@ require_once __DIR__ . '/includes/header.php';
     </form>
 
     <div style="margin-top:1.15rem;padding-top:1rem;border-top:1px solid var(--vs-border);font-size:0.78rem;color:var(--vs-muted);display:flex;flex-direction:column;gap:0.35rem;">
-      <div>حساب مضيف تجريبي: <code class="mono">host@abuanas.local</code> / <code class="mono">Host@2026</code></div>
-      <div>حساب مدير النظام: <code class="mono">admin@abuanas.local</code> / <code class="mono">Admin@2026</code></div>
+      <?php if (vsEnv('APP_ENV', 'local') === 'local'): ?>
+        <div>حساب مضيف تجريبي: <code class="mono">host@abuanas.local</code> / <code class="mono">Host@2026</code></div>
+        <div>حساب مدير النظام: <code class="mono">admin@abuanas.local</code> / <code class="mono">Admin@2026</code></div>
+      <?php endif; ?>
       <div style="margin-top:0.25rem;">ليس لديك حساب؟ <a href="<?php echo SITE_URL; ?>/register.php" style="color:var(--vs-accent);font-weight:700;">إنشاء حساب جديد مجاناً</a></div>
     </div>
   </div>

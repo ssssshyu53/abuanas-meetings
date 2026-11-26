@@ -24,7 +24,7 @@ $userRole = (string)($vsUser['role'] ?? '');
   </script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@dawod/thmanyah-font-web@1.2.0/index.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="<?php echo SITE_URL; ?>/assets/css/app.css?v=2">
+  <link rel="stylesheet" href="<?php echo SITE_URL; ?>/assets/css/app.css?v=3">
   <script src="<?php echo SITE_URL; ?>/assets/js/sweetalert2.all.min.js"></script>
 </head>
 <body>
@@ -50,6 +50,19 @@ $userRole = (string)($vsUser['role'] ?? '');
           <a href="<?php echo SITE_URL; ?>/admin/monitor.php" class="vs-nav-link <?php echo $curScript === 'monitor.php' ? 'active' : ''; ?>">المراقبة</a>
         <?php endif; ?>
       <?php endif; ?>
+
+      <div class="vs-mobile-only-actions">
+        <?php if ($vsUser): ?>
+          <a href="<?php echo SITE_URL; ?>/dashboard.php" class="vs-btn vs-btn-primary" style="width:100%;">
+            <i class="fas <?php echo in_array($userRole, ['host', 'admin'], true) ? 'fa-plus' : 'fa-arrow-up'; ?>"></i>
+            <span><?php echo in_array($userRole, ['host', 'admin'], true) ? 'اجتماع جديد' : 'ترقية لمضيف'; ?></span>
+          </a>
+          <a href="<?php echo SITE_URL; ?>/logout.php" class="vs-btn vs-btn-outline" style="width:100%;">تسجيل الخروج</a>
+        <?php else: ?>
+          <a href="<?php echo SITE_URL; ?>/register.php" class="vs-btn vs-btn-primary" style="width:100%;">حساب مضيف مجاني</a>
+          <a href="<?php echo SITE_URL; ?>/login.php" class="vs-btn vs-btn-outline" style="width:100%;">تسجيل الدخول</a>
+        <?php endif; ?>
+      </div>
     </nav>
 
     <div class="vs-nav-actions">
@@ -57,14 +70,14 @@ $userRole = (string)($vsUser['role'] ?? '');
         <i class="fas fa-moon" id="vsThemeIcon"></i>
       </button>
       <?php if ($vsUser): ?>
-        <a href="<?php echo SITE_URL; ?>/dashboard.php" class="vs-btn vs-btn-primary">
+        <a href="<?php echo SITE_URL; ?>/dashboard.php" class="vs-btn vs-btn-primary vs-nav-desktop-only">
           <i class="fas <?php echo in_array($userRole, ['host', 'admin'], true) ? 'fa-plus' : 'fa-arrow-up'; ?>"></i>
           <span><?php echo in_array($userRole, ['host', 'admin'], true) ? 'اجتماع جديد' : 'ترقية لمضيف'; ?></span>
         </a>
-        <a href="<?php echo SITE_URL; ?>/logout.php" class="vs-btn vs-btn-outline" title="تسجيل الخروج">خروج</a>
+        <a href="<?php echo SITE_URL; ?>/logout.php" class="vs-btn vs-btn-outline vs-nav-desktop-only" title="تسجيل الخروج">خروج</a>
       <?php else: ?>
-        <a href="<?php echo SITE_URL; ?>/login.php" class="vs-btn vs-btn-outline">دخول</a>
-        <a href="<?php echo SITE_URL; ?>/register.php" class="vs-btn vs-btn-primary">حساب مضيف مجاني</a>
+        <a href="<?php echo SITE_URL; ?>/login.php" class="vs-btn vs-btn-outline vs-nav-desktop-only">دخول</a>
+        <a href="<?php echo SITE_URL; ?>/register.php" class="vs-btn vs-btn-primary vs-nav-desktop-only">حساب مضيف مجاني</a>
       <?php endif; ?>
       <button type="button" class="vs-btn-icon vs-mobile-toggle" onclick="document.getElementById('vsMainNav').classList.toggle('open')" aria-label="القائمة">
         <i class="fas fa-bars"></i>

@@ -13,7 +13,9 @@ $error = '';
 $selectedType = ($_POST['account_type'] ?? 'host') === 'member' ? 'member' : 'host';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (!vsVerifyCsrf()) {
+    if (!vsRateLimit('register', 8, 900)) {
+        $error = 'تم تجاوز الحد المسموح للتسجيل المؤقت، حاول لاحقاً.';
+    } elseif (!vsVerifyCsrf()) {
         $error = 'انتهت صلاحية الجلسة.';
     } else {
         $res = Auth::register(

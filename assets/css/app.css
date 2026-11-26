@@ -189,7 +189,12 @@ html.dark .vs-navbar {
   border-radius: var(--vs-radius-card);
   padding: 1.25rem;
   box-shadow: var(--vs-shadow-sm);
+  transition: box-shadow 180ms ease, border-color 180ms ease, transform 180ms ease;
 }
+.vs-card:hover {
+  box-shadow: var(--vs-shadow-md);
+}
+.vs-mobile-only-actions { display: none; }
 .vs-badge {
   display: inline-flex;
   align-items: center;
@@ -209,7 +214,8 @@ html.dark .vs-badge-amber { color: #FCD34D; }
 
 /* Asymmetric Split Hero */
 .vs-hero {
-  padding: 2.5rem 0 3rem;
+  padding: 2.75rem 0 3.25rem;
+  background: radial-gradient(760px circle at 15% 15%, var(--vs-accent-soft), transparent 65%);
 }
 .vs-hero-grid {
   display: grid;
@@ -295,6 +301,11 @@ html.dark .vs-badge-amber { color: #FCD34D; }
   .vs-grid-2 { grid-template-columns: 1fr; }
 }
 @media (max-width: 767px) {
+  .vs-container { padding: 0 0.95rem; }
+  .vs-hero { padding: 1.65rem 0 2rem; }
+  .vs-hero h1 { font-size: 1.72rem; line-height: 1.25; }
+  .vs-hero-sub { font-size: 0.95rem; }
+  .vs-nav-desktop-only { display: none !important; }
   .vs-nav-links {
     display: none;
     position: absolute;
@@ -303,10 +314,24 @@ html.dark .vs-badge-amber { color: #FCD34D; }
     right: 0;
     background: var(--vs-surface);
     border-bottom: 1px solid var(--vs-border);
-    padding: 0.75rem 1.25rem;
+    box-shadow: var(--vs-shadow-md);
+    padding: 0.85rem 1rem 1.1rem;
     flex-direction: column;
     align-items: stretch;
+    gap: 0.45rem;
+    z-index: 45;
   }
   .vs-nav-links.open { display: flex; }
+  .vs-nav-link { padding: 0.65rem 0.9rem; font-size: 0.94rem; }
+  .vs-mobile-only-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.55rem;
+    padding-top: 0.65rem;
+    border-top: 1px solid var(--vs-border);
+  }
   .vs-btn-icon.vs-mobile-toggle { display: inline-flex; }
+  .vs-input, .vs-select, .vs-textarea { font-size: 16px; }
+  .vs-btn { min-height: 42px; }
 }

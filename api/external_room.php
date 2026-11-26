@@ -18,6 +18,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
     vsJson(405, ['success' => false, 'error' => 'Method not allowed. Use POST.']);
 }
 
+if (!vsRateLimit('external_room', 60, 60)) {
+    vsJson(429, ['success' => false, 'error' => 'Rate limit exceeded. Try again shortly.']);
+}
+
 $raw = json_decode((string)file_get_contents('php://input'), true) ?: $_POST;
 $apiKey = trim((string)($_SERVER['HTTP_X_API_KEY'] ?? ($raw['api_key'] ?? '')));
 if ($apiKey === '') {

@@ -33,6 +33,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $db->prepare("UPDATE rooms SET status = 'ended', ended_at = ? WHERE id = ? AND host_user_id = ?")->execute([$now, $rid, (int)$user['id']]);
             }
             $okMsg = 'تم إنهاء الاجتماع بنجاح.';
+        } elseif ($act === 'change_password') {
+            $cur = (string)($_POST['current_password'] ?? '');
+            $new = (string)($_POST['new_password'] ?? '');
+            $cnf = (string)($_POST['confirm_password'] ?? '');
+            if ($new !== $cnf) {
+                $err = 'كلمتا المرور الجديدتان غير متطابقتين.';
+            } else {
+                $cp = Auth::changePassword((int)$user['id'], $cur, $new);
+                if ($cp['ok']) {
+                    $okMsg = 'تم تحديث كلمة المرور بنجاح.';
+                } else {
+                    $err = $cp['error'] ?? 'تعذر تحديث كلمة المرور';
+                }
+            }
         }
     }
 }
@@ -262,5 +276,32 @@ require_once __DIR__ . '/includes/header.php';
     <?php endif; ?>
   </div>
   <?php endif; ?>
+
+  <!-- Account Security & Password Change -->
+  <div class="vs-card" style="margin-top:1.25rem;">
+    <details>
+      <summary style="cursor:pointer;font-weight:800;font-size:0.98rem;display:flex;align-items:center;gap:0.5rem;">
+        <i class="fas fa-shield-alt" style="color:var(--vs-accent);"></i>
+        <span>أمان الحساب وتغيير كلمة المرور</span>
+      </summary>
+      <form method="POST" style="margin-top:1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0.8rem;align-items:end;">
+        <input type="hidden" name="csrf_token" value="<?php echo vsEsc(vsCsrfToken()); ?>">
+        <input type="hidden" name="action" value="change_password">
+        <div>
+          <label class="vs-label" for="curPassInp">كلمة المرور الحالية</label>
+          <input id="curPassInp" type="password" name="current_password" class="vs-input" required>
+        </div>
+        <div>
+          <label class="vs-label" for="newPassInp">كلمة المرور الجديدة (8 أحرف+)</label>
+          <input id="newPassInp" type="password" name="new_password" class="vs-input" minlength="8" required>
+        </div>
+        <div>
+          <label class="vs-label" for="cnfPassInp">تأكيد كلمة المرور الجديدة</label>
+          <input id="cnfPassInp" type="password" name="confirm_password" class="vs-input" minlength="8" required>
+        </div>
+        <button type="submit" class="vs-btn vs-btn-outline" style="width:100%;">تحديث كلمة المرور</button>
+      </form>
+    </details>
+  </div>
 </div>
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

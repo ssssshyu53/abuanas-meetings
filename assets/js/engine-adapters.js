@@ -114,6 +114,14 @@
         const room = new global.LivekitClient.Room({ adaptiveStream: true, dynacast: true });
         this.videoClient = { type: 'livekit', room };
         const attachTrack = (track, participant) => {
+          if (!track || !participant) return;
+          if (track.kind === 'audio') {
+            const audioEl = track.attach();
+            audioEl.id = 'lk-aud-' + participant.identity;
+            audioEl.style.display = 'none';
+            grid.appendChild(audioEl);
+            return;
+          }
           if (track.kind !== 'video') return;
           const id = 'lk-' + participant.identity;
           let tile = document.getElementById(id);
@@ -121,7 +129,10 @@
             tile = document.createElement('div');
             tile.id = id;
             tile.className = 'vs-video-tile';
-            tile.innerHTML = `<div class="vs-video-label">${participant.name || participant.identity}</div>`;
+            const lbl = document.createElement('div');
+            lbl.className = 'vs-video-label';
+            lbl.textContent = participant.name || participant.identity || 'مشارك';
+            tile.appendChild(lbl);
             grid.appendChild(tile);
           }
           const el = track.attach();
@@ -129,10 +140,26 @@
         };
         room.on(global.LivekitClient.RoomEvent.TrackSubscribed, attachTrack);
         room.on(global.LivekitClient.RoomEvent.LocalTrackPublished, (pub) => attachTrack(pub.track, room.localParticipant));
-        room.on(global.LivekitClient.RoomEvent.TrackUnsubscribed, (t) => t.detach().forEach((el) => el.parentElement?.remove()));
+        room.on(global.LivekitClient.RoomEvent.TrackUnsubscribed, (t) => t.detach().forEach((el) => {
+          const parent = el.parentElement;
+          el.remove();
+          if (parent && parent.classList.contains('vs-video-tile') && !parent.querySelector('video')) {
+            parent.remove();
+          }
+        }));
+        room.on(global.LivekitClient.RoomEvent.ParticipantDisconnected, (p) => {
+          document.getElementById('lk-' + p.identity)?.remove();
+          document.getElementById('lk-aud-' + p.identity)?.remove();
+        });
         await room.connect(v.wsUrl, v.token);
         if (auth.role === 'host') {
-          await room.localParticipant.setCameraEnabled(true);
+          try {
+            await room.localParticipant.setCameraEnabled(true);
+          } catch (camErr) {
+            if (this.opts.onFallbackNotice) {
+              this.opts.onFallbackNotice('تم الانضمام للفيديو بدون كاميرا نشطة (يمكنك تفعيلها أو مشاركة الشاشة من الأسفل).');
+            }
+          }
         }
       } else if (v.provider === 'daily') {
         await loadScriptOnce('https://unpkg.com/@daily-co/daily-js');
@@ -179,8 +206,11 @@
             tile.className = 'vs-video-tile';
             const vid = document.createElement('video');
             vid.autoplay = true; vid.muted = true; vid.playsInline = true; vid.srcObject = camStream;
+            const lbl = document.createElement('div');
+            lbl.className = 'vs-video-label';
+            lbl.textContent = String(this.opts.userName || 'المضيف');
             tile.appendChild(vid);
-            tile.insertAdjacentHTML('beforeend', `<div class="vs-video-label">${this.opts.userName}</div>`);
+            tile.appendChild(lbl);
             grid.appendChild(tile);
           }
         }

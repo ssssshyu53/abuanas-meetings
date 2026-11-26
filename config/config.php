@@ -182,6 +182,69 @@ function vsRedirect(string $url): never
     exit;
 }
 
+function vsSendSecurityHeaders(bool $allowEmbed = false): void
+{
+    if (PHP_SAPI === 'cli' || headers_sent()) {
+        return;
+    }
+    $isHttps = (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower((string)$_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https')
+        || (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off');
+    header('X-Content-Type-Options: nosniff');
+    header('Referrer-Policy: strict-origin-when-cross-origin');
+    header('Permissions-Policy: camera=(self), microphone=(self), display-capture=(self)');
+    if ($isHttps) {
+        header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+    }
+    if ($allowEmbed) {
+        header_remove('X-Frame-Options');
+        header('Content-Security-Policy: frame-ancestors *');
+    } else {
+        header('X-Frame-Options: SAMEORIGIN');
+        header("Content-Security-Policy: frame-ancestors 'self'");
+    }
+}
+
+function vsRateLimit(string $bucket, int $maxAttempts, int $windowSeconds): bool
+{
+    if (PHP_SAPI === 'cli') {
+        return true;
+    }
+    $ip = trim((string)($_SERVER['HTTP_CF_CONNECTING_IP'] ?? ($_SERVER['HTTP_X_FORWARDED_FOR'] ?? ($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0'))));
+    $ip = trim(explode(',', $ip)[0]);
+    $file = rtrim(sys_get_temp_dir(), '/\\') . '/aam_rl_' . sha1($bucket . '|' . $ip) . '.json';
+    $now = time();
+
+    $fh = @fopen($file, 'c+');
+    if (!$fh) {
+        return true;
+    }
+    if (@flock($fh, LOCK_EX)) {
+        $raw = stream_get_contents($fh);
+        $hits = json_decode($raw ?: '[]', true);
+        if (!is_array($hits)) {
+            $hits = [];
+        }
+        $hits = array_values(array_filter($hits, static fn($t) => is_int($t) && ($now - $t) < $windowSeconds));
+        if (count($hits) >= $maxAttempts) {
+            @flock($fh, LOCK_UN);
+            @fclose($fh);
+            return false;
+        }
+        $hits[] = $now;
+        ftruncate($fh, 0);
+        rewind($fh);
+        fwrite($fh, json_encode($hits));
+        fflush($fh);
+        @flock($fh, LOCK_UN);
+    }
+    @fclose($fh);
+    return true;
+}
+
+if (PHP_SAPI !== 'cli' && basename((string)($_SERVER['PHP_SELF'] ?? '')) !== 'room.php') {
+    vsSendSecurityHeaders(false);
+}
+
 require_once __DIR__ . '/database.php';
 require_once VS_ROOT . '/classes/Auth.php';
 require_once VS_ROOT . '/classes/EngineRouter.php';

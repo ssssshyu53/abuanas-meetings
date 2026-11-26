@@ -6,9 +6,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/config.php';
 
 $isEmbed = !empty($_GET['embed']);
-if ($isEmbed) {
-    header('Content-Security-Policy: frame-ancestors *');
-}
+vsSendSecurityHeaders($isEmbed);
 
 $db = Database::getInstance()->connect();
 $code = strtoupper(trim((string)($_GET['code'] ?? '')));
@@ -102,7 +100,7 @@ $forcedTheme = in_array($_GET['theme'] ?? '', ['light', 'dark'], true) ? $_GET['
   </script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@dawod/thmanyah-font-web@1.2.0/index.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="<?php echo SITE_URL; ?>/assets/css/room.css?v=2">
+  <link rel="stylesheet" href="<?php echo SITE_URL; ?>/assets/css/room.css?v=3">
   <script src="<?php echo SITE_URL; ?>/assets/js/sweetalert2.all.min.js"></script>
 </head>
 <body>
@@ -111,7 +109,7 @@ $forcedTheme = in_array($_GET['theme'] ?? '', ['light', 'dark'], true) ? $_GET['
   <div id="roomHeaderBar">
     <div class="vs-h-right">
       <div class="vs-h-logo" style="background:transparent;padding:0;" aria-hidden="true">
-        <img src="<?php echo SITE_URL; ?>/assets/images/logo-mark.png" alt="Abu Anas Meetings" style="width:36px;height:36px;object-fit:contain;">
+        <img src="<?php echo SITE_URL; ?>/assets/images/logo-mark.png" alt="Abu Anas Meetings" style="width:34px;height:34px;object-fit:contain;">
       </div>
       <div class="vs-h-title-block">
         <div class="vs-h-title-row">
@@ -131,24 +129,24 @@ $forcedTheme = in_array($_GET['theme'] ?? '', ['light', 'dark'], true) ? $_GET['
       <?php if ($isHost): ?>
       <button type="button" id="headerHandBadge" onclick="vsFocusHands()" class="hidden vs-pill-btn is-hand-alert">
         <i class="fas fa-hand-paper"></i>
-        <span><span id="headerHandCount">0</span> يطلب المداخلة</span>
+        <span><span id="headerHandCount">0</span> <span class="vs-pill-label">يطلب المداخلة</span></span>
       </button>
       <?php endif; ?>
 
       <button type="button" id="wbToggleBtn" onclick="vsToggleWhiteboard()" class="vs-pill-btn <?php echo (int)$room['whiteboard_enabled'] === 1 ? 'is-active' : ''; ?>" title="السبورة والشرائح">
         <i class="fas fa-chalkboard"></i>
-        <span>السبورة</span>
+        <span class="vs-pill-label">السبورة</span>
       </button>
 
       <button type="button" id="chatToggleBtn" onclick="vsToggleChat()" class="vs-pill-btn is-active" title="المحادثة والاستطلاعات">
         <i class="fas fa-comments"></i>
-        <span>المحادثة</span>
+        <span class="vs-pill-label">المحادثة</span>
       </button>
 
       <div id="shareMenuWrap">
-        <button type="button" onclick="vsToggleShare(event)" class="vs-pill-btn">
+        <button type="button" onclick="vsToggleShare(event)" class="vs-pill-btn" title="مشاركة">
           <i class="fas fa-share-alt" style="color:var(--vs-accent);"></i>
-          <span>مشاركة</span>
+          <span class="vs-pill-label">مشاركة</span>
         </button>
         <div id="shareMenuDropdown" class="hidden">
           <button type="button" onclick="vsShare('whatsapp')" class="vs-share-opt"><i class="fab fa-whatsapp" style="color:#10B981;"></i> مشاركة عبر واتساب</button>
@@ -333,6 +331,7 @@ $forcedTheme = in_array($_GET['theme'] ?? '', ['light', 'dark'], true) ? $_GET['
     </div>
 
     <!-- Side Panel: Live Chat + Polls -->
+    <div id="mobileChatBackdrop" onclick="vsToggleChat()"></div>
     <aside id="chatPanelCard">
       <div class="vs-side-tabs">
         <div style="display:flex;gap:0.25rem;">
@@ -400,7 +399,7 @@ window.AAM_ROOM_CONFIG = {
 <script src="<?php echo SITE_URL; ?>/assets/js/lame.min.js"></script>
 <script src="<?php echo SITE_URL; ?>/assets/js/audio-engine.js?v=1"></script>
 <script src="<?php echo SITE_URL; ?>/assets/js/whiteboard.js?v=1"></script>
-<script src="<?php echo SITE_URL; ?>/assets/js/engine-adapters.js?v=1"></script>
-<script src="<?php echo SITE_URL; ?>/assets/js/room-app.js?v=2"></script>
+<script src="<?php echo SITE_URL; ?>/assets/js/engine-adapters.js?v=2"></script>
+<script src="<?php echo SITE_URL; ?>/assets/js/room-app.js?v=3"></script>
 </body>
 </html>

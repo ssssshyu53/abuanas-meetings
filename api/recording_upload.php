@@ -32,12 +32,15 @@ if ($action === 'append') {
     if (empty($_FILES['chunk']) || $_FILES['chunk']['error'] !== UPLOAD_ERR_OK) {
         vsJson(422, ['success' => false, 'error' => 'ملف المقطع مفقود']);
     }
+    if ((int)($_FILES['chunk']['size'] ?? 0) > 10 * 1024 * 1024) {
+        vsJson(422, ['success' => false, 'error' => 'حجم مقطع التسجيل يتجاوز الحد المسموح (10MB)']);
+    }
     $bin = file_get_contents($_FILES['chunk']['tmp_name']);
     if ($bin === false || $bin === '') {
         vsJson(422, ['success' => false, 'error' => 'مقطع فارغ']);
     }
     $res = RecordingPublisher::appendChunk((int)$room['id'], $bin);
-    vsJson(200, array_merge(['success' => $res['ok']], $res));
+    vsJson($res['ok'] ? 200 : 422, array_merge(['success' => $res['ok']], $res));
 }
 
 if ($action === 'finalize') {

@@ -127,9 +127,12 @@ if ($action === 'upload_slide') {
     if (empty($_FILES['slide']) || $_FILES['slide']['error'] !== UPLOAD_ERR_OK) {
         vsJson(422, ['success' => false, 'error' => 'لم يتم رفع الصورة بنجاح']);
     }
+    if ((int)($_FILES['slide']['size'] ?? 0) > 5 * 1024 * 1024) {
+        vsJson(422, ['success' => false, 'error' => 'الحد الأقصى لحجم الشريحة هو 5 ميجابايت']);
+    }
     $ext = strtolower(pathinfo((string)$_FILES['slide']['name'], PATHINFO_EXTENSION));
-    if (!in_array($ext, ['png', 'jpg', 'jpeg', 'webp'], true)) {
-        vsJson(422, ['success' => false, 'error' => 'يسمح فقط بصور PNG / JPG / WEBP للشرائح']);
+    if (!in_array($ext, ['png', 'jpg', 'jpeg', 'webp'], true) || @getimagesize((string)$_FILES['slide']['tmp_name']) === false) {
+        vsJson(422, ['success' => false, 'error' => 'يسمح فقط بصور PNG / JPG / WEBP صالحة للشرائح']);
     }
     $dir = VS_ROOT . '/uploads/slides';
     if (!is_dir($dir)) @mkdir($dir, 0775, true);
