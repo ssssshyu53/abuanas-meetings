@@ -176,9 +176,13 @@ class Database
                 }
                 return false;
             }
-            $st = $pdo->prepare("SHOW COLUMNS FROM `{$table}` LIKE ?");
-            $st->execute([$col]);
-            return (bool)$st->fetch();
+            $rows = $pdo->query("SHOW COLUMNS FROM `{$table}`")->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as $r) {
+                if (strcasecmp((string)($r['Field'] ?? ''), $col) === 0) {
+                    return true;
+                }
+            }
+            return false;
         };
 
         $alterSpecs = [
