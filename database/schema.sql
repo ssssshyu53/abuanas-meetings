@@ -3,10 +3,13 @@
 CREATE TABLE IF NOT EXISTS users (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(120) NOT NULL,
+    workspace_name VARCHAR(120) NOT NULL DEFAULT '',
     email VARCHAR(190) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     role ENUM('admin', 'host', 'member') NOT NULL DEFAULT 'member',
     avatar_color VARCHAR(20) NOT NULL DEFAULT '#1D63ED',
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    last_login_at TIMESTAMP NULL DEFAULT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -30,7 +33,8 @@ CREATE TABLE IF NOT EXISTS rooms (
     media_mode ENUM('audio', 'video') NOT NULL DEFAULT 'audio',
     forced_engine VARCHAR(32) NOT NULL DEFAULT 'auto',
     active_engine VARCHAR(32) DEFAULT NULL,
-    access_mode ENUM('public', 'code', 'registered') NOT NULL DEFAULT 'public',
+    access_mode ENUM('public', 'code', 'registered') NOT NULL DEFAULT 'code',
+    passcode VARCHAR(64) NOT NULL DEFAULT '',
     status ENUM('scheduled', 'live', 'ended') NOT NULL DEFAULT 'live',
     allow_all_mic TINYINT(1) NOT NULL DEFAULT 0,
     whiteboard_enabled TINYINT(1) NOT NULL DEFAULT 0,
@@ -91,6 +95,7 @@ CREATE TABLE IF NOT EXISTS recordings (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     room_id INT UNSIGNED NOT NULL,
     title VARCHAR(200) NOT NULL,
+    media_type ENUM('audio', 'video') NOT NULL DEFAULT 'audio',
     file_path VARCHAR(255) NOT NULL DEFAULT '',
     r2_url VARCHAR(500) NOT NULL DEFAULT '',
     telegram_sent TINYINT(1) NOT NULL DEFAULT 0,

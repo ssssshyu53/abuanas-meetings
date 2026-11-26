@@ -6,16 +6,19 @@ declare(strict_types=1);
 
 class RecordingPublisher
 {
-    public static function appendChunk(int $roomId, string $binData): array
+    public static function appendChunk(int $roomId, string $binData, string $mediaType = 'audio', string $ext = 'mp3'): array
     {
+        $mediaType = $mediaType === 'video' ? 'video' : 'audio';
+        $ext = in_array($ext, ['mp3', 'webm', 'mp4'], true) ? $ext : ($mediaType === 'video' ? 'webm' : 'mp3');
         $dir = VS_ROOT . '/uploads/recordings';
         if (!is_dir($dir)) {
             @mkdir($dir, 0775, true);
         }
-        $partFile = $dir . '/room_' . $roomId . '.part.mp3';
+        $partFile = $dir . '/room_' . $roomId . '_' . $mediaType . '.part.' . $ext;
         $curSize = is_file($partFile) ? (int)filesize($partFile) : 0;
-        if (($curSize + strlen($binData)) > 120 * 1024 * 1024) {
-            return ['ok' => false, 'error' => 'تجاوز التسجيل الحد الأقصى المسموح (120MB)'];
+        $maxBytes = ($mediaType === 'video' ? 300 : 120) * 1024 * 1024;
+        if (($curSize + strlen($binData)) > $maxBytes) {
+            return ['ok' => false, 'error' => 'تجاوز التسجيل الحد الأقصى المسموح'];
         }
         $written = file_put_contents($partFile, $binData, FILE_APPEND | LOCK_EX);
         return [
@@ -24,16 +27,22 @@ class RecordingPublisher
         ];
     }
 
-    public static function finalize(PDO $db, array $room, int $durationSeconds = 0): array
+    public static function finalize(PDO $db, array $room, int $durationSeconds = 0, string $mediaType = 'audio', string $ext = 'mp3'): array
     {
         $roomId = (int)$room['id'];
+        $mediaType = $mediaType === 'video' ? 'video' : 'audio';
+        $ext = in_array($ext, ['mp3', 'webm', 'mp4'], true) ? $ext : ($mediaType === 'video' ? 'webm' : 'mp3');
         $dir = VS_ROOT . '/uploads/recordings';
-        $partFile = $dir . '/room_' . $roomId . '.part.mp3';
+        $partFile = $dir . '/room_' . $roomId . '_' . $mediaType . '.part.' . $ext;
+        if (!is_file($partFile) && $mediaType === 'audio' && is_file($dir . '/room_' . $roomId . '.part.mp3')) {
+            $partFile = $dir . '/room_' . $roomId . '.part.mp3';
+        }
         if (!is_file($partFile) || filesize($partFile) < 256) {
-            return ['ok' => true, 'saved' => false, 'message' => 'لا توجد مقاطع صوتية مسجلة لحفظها'];
+            return ['ok' => true, 'saved' => false, 'media_type' => $mediaType, 'message' => 'لا توجد مقاطع مسجلة لحفظها'];
         }
 
-        $finalName = 'abuanas_' . strtolower((string)$room['code']) . '_' . date('Ymd_His') . '.mp3';
+        $prefix = $mediaType === 'video' ? 'abuanas_vid_' : 'abuanas_';
+        $finalName = $prefix . strtolower((string)$room['code']) . '_' . date('Ymd_His') . '.' . $ext;
         $finalPath = $dir . '/' . $finalName;
         @rename($partFile, $finalPath);
         $relPath = 'uploads/recordings/' . $finalName;
@@ -48,17 +57,18 @@ class RecordingPublisher
             $r2Url = self::uploadToR2($providers['r2']['config'], $finalPath, 'recordings/' . $finalName);
         }
 
-        // Optional Telegram Bot publish
-        if (!empty($providers['telegram']) && (int)$providers['telegram']['enabled'] === 1 && $providers['telegram']['configured']) {
+        // Optional Telegram Bot publish (audio files)
+        if ($mediaType === 'audio' && !empty($providers['telegram']) && (int)$providers['telegram']['enabled'] === 1 && $providers['telegram']['configured']) {
             $tgSent = self::sendToTelegram($providers['telegram']['config'], $finalPath, (string)$room['title']) ? 1 : 0;
         }
 
-        $st = $db->prepare('INSERT INTO recordings (room_id, title, file_path, r2_url, telegram_sent, duration_seconds, size_bytes) VALUES (?, ?, ?, ?, ?, ?, ?)');
-        $st->execute([$roomId, (string)$room['title'], $relPath, $r2Url, $tgSent, max(0, $durationSeconds), $size]);
+        $st = $db->prepare('INSERT INTO recordings (room_id, title, media_type, file_path, r2_url, telegram_sent, duration_seconds, size_bytes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+        $st->execute([$roomId, (string)$room['title'], $mediaType, $relPath, $r2Url, $tgSent, max(0, $durationSeconds), $size]);
 
         return [
             'ok'            => true,
             'saved'         => true,
+            'media_type'    => $mediaType,
             'recording_id'  => (int)$db->lastInsertId(),
             'file_url'      => SITE_URL . '/' . $relPath,
             'r2_url'        => $r2Url,

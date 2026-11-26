@@ -127,6 +127,8 @@ class Database
                     }
                 }
             }
+        } else {
+            $this->migrateColumns($pdo, $isSqlite);
         }
 
         // Seed default provider entries idempotently
@@ -138,7 +140,7 @@ class Database
             ['livekit', 'LiveKit Cloud (تفاعل مرئي ووكلاء)', 'video', 1, 1, 5000, 'minutes_month', $monthKey, ['api_key' => vsEnv('LIVEKIT_API_KEY', ''), 'api_secret' => vsEnv('LIVEKIT_API_SECRET', ''), 'ws_url' => vsEnv('LIVEKIT_WS_URL', '')]],
             ['daily', 'Daily.co (اجتماعات ولقاءات سريعة)', 'video', 1, 2, 10000, 'minutes_month', $monthKey, ['api_key' => vsEnv('DAILY_API_KEY', ''), 'domain' => vsEnv('DAILY_DOMAIN', '')]],
             ['cf_sfu', 'Cloudflare Realtime Calls SFU (فيديو وشاشة)', 'video', 1, 3, 1000, 'gb_month', $monthKey, ['app_id' => vsEnv('CF_SFU_APP_ID', ''), 'app_secret' => vsEnv('CF_SFU_APP_SECRET', '')]],
-            ['hms', '100ms Live (محاضرات مرئية وبث)', 'video', 1, 4, 10000, 'minutes_month', $monthKey, ['access_key' => vsEnv('HMS_ACCESS_KEY', ''), 'app_secret' => vsEnv('HMS_APP_SECRET', ''), 'template_id' => vsEnv('HMS_TEMPLATE_ID', '')]],
+            ['hms', '100ms Live (محاضرات مرئية وبث)', 'video', 1, 4, 10000, 'minutes_month', $monthKey, ['access_key' => vsEnv('HMS_ACCESS_KEY', ''), 'app_secret' => vsEnv('HMS_APP_SECRET', ''), 'template_id' => vsEnv('HMS_TEMPLATE_ID', ''), 'host_role' => vsEnv('HMS_HOST_ROLE', 'host'), 'guest_role' => vsEnv('HMS_GUEST_ROLE', 'guest')]],
             ['r2', 'Cloudflare R2 Storage (أرشفة مجانية بدون رسوم سحب)', 'storage', 1, 1, 10, 'gb_month', $monthKey, ['account_id' => vsEnv('R2_ACCOUNT_ID', ''), 'access_key' => vsEnv('R2_ACCESS_KEY_ID', ''), 'secret_key' => vsEnv('R2_SECRET_ACCESS_KEY', ''), 'bucket' => vsEnv('R2_BUCKET', ''), 'public_url' => vsEnv('R2_PUBLIC_URL', '')]],
             ['telegram', 'Telegram Webhook Publishing (نشر تلقائي اختياري)', 'storage', 0, 2, 0, 'gb_month', $monthKey, ['bot_token' => vsEnv('TELEGRAM_BOT_TOKEN', ''), 'chat_id' => vsEnv('TELEGRAM_CHAT_ID', '')]],
         ];
@@ -155,10 +157,46 @@ class Database
         // Seed starter demo accounts ONLY if database has zero users
         $userCount = (int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
         if ($userCount === 0) {
-            $insUser = $pdo->prepare('INSERT INTO users (name, email, password_hash, role, avatar_color) VALUES (?, ?, ?, ?, ?)');
-            $insUser->execute(['مدير المنصة', 'admin@abuanas.local', password_hash('Admin@2026', PASSWORD_BCRYPT), 'admin', '#1D63ED']);
-            $insUser->execute(['أنس محمد (مضيف)', 'host@abuanas.local', password_hash('Host@2026', PASSWORD_BCRYPT), 'host', '#0EA5E9']);
-            $insUser->execute(['مشارك تجريبي', 'user@abuanas.local', password_hash('User@2026', PASSWORD_BCRYPT), 'member', '#10B981']);
+            $insUser = $pdo->prepare('INSERT INTO users (name, workspace_name, email, password_hash, role, avatar_color) VALUES (?, ?, ?, ?, ?, ?)');
+            $insUser->execute(['مدير المنصة', 'أبو أنس ميتينجز', 'admin@abuanas.local', password_hash('Admin@2026', PASSWORD_BCRYPT), 'admin', '#1D63ED']);
+            $insUser->execute(['أنس محمد (مضيف)', 'غرفة أنس الخاصة', 'host@abuanas.local', password_hash('Host@2026', PASSWORD_BCRYPT), 'host', '#0EA5E9']);
+            $insUser->execute(['مشارك تجريبي', '', 'user@abuanas.local', password_hash('User@2026', PASSWORD_BCRYPT), 'member', '#10B981']);
+        }
+    }
+
+    private function migrateColumns(PDO $pdo, bool $isSqlite): void
+    {
+        $hasCol = static function (string $table, string $col) use ($pdo, $isSqlite): bool {
+            if ($isSqlite) {
+                $rows = $pdo->query("PRAGMA table_info({$table})")->fetchAll(PDO::FETCH_ASSOC);
+                foreach ($rows as $r) {
+                    if (strcasecmp((string)($r['name'] ?? ''), $col) === 0) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            $st = $pdo->prepare("SHOW COLUMNS FROM `{$table}` LIKE ?");
+            $st->execute([$col]);
+            return (bool)$st->fetch();
+        };
+
+        $alterSpecs = [
+            ['users', 'workspace_name', $isSqlite ? "ALTER TABLE users ADD COLUMN workspace_name TEXT NOT NULL DEFAULT ''" : "ALTER TABLE users ADD COLUMN workspace_name VARCHAR(120) NOT NULL DEFAULT '' AFTER name"],
+            ['users', 'is_active', $isSqlite ? "ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1" : "ALTER TABLE users ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1 AFTER avatar_color"],
+            ['users', 'last_login_at', $isSqlite ? "ALTER TABLE users ADD COLUMN last_login_at TEXT NULL DEFAULT NULL" : "ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP NULL DEFAULT NULL AFTER is_active"],
+            ['rooms', 'passcode', $isSqlite ? "ALTER TABLE rooms ADD COLUMN passcode TEXT NOT NULL DEFAULT ''" : "ALTER TABLE rooms ADD COLUMN passcode VARCHAR(64) NOT NULL DEFAULT '' AFTER access_mode"],
+            ['recordings', 'media_type', $isSqlite ? "ALTER TABLE recordings ADD COLUMN media_type TEXT NOT NULL DEFAULT 'audio'" : "ALTER TABLE recordings ADD COLUMN media_type ENUM('audio','video') NOT NULL DEFAULT 'audio' AFTER title"],
+        ];
+
+        foreach ($alterSpecs as [$tbl, $col, $sql]) {
+            if (!$hasCol($tbl, $col)) {
+                try {
+                    $pdo->exec($sql);
+                } catch (Throwable $e) {
+                    error_log("Migration skipped ({$tbl}.{$col}): " . $e->getMessage());
+                }
+            }
         }
     }
 }

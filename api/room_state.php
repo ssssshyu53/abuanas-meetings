@@ -20,6 +20,9 @@ $actor = Auth::resolveActor($room);
 if (!$actor) {
     vsJson(401, ['success' => false, 'error' => 'غير مصرح بالدخول']);
 }
+if (!Auth::hasRoomPasscodeAccess($room, $actor)) {
+    vsJson(403, ['success' => false, 'error' => 'يلزم إدخال رمز الدخول للغرفة']);
+}
 
 $roomId = (int)$room['id'];
 if ($method === 'POST' && !vsVerifyCsrf((string)($body['csrf_token'] ?? ''))) {

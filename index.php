@@ -1,99 +1,153 @@
 <?php
 /**
- * Abu Anas Meetings — Open Source Meetings Landing & Directory
+ * Abu Anas Meetings — Jitsi-Style Standalone Meeting Launcher (Private Multi-Host SaaS)
  */
 declare(strict_types=1);
 require_once __DIR__ . '/config/config.php';
 
-$db = Database::getInstance()->connect();
-$liveSt = $db->prepare("
-    SELECT r.*, u.name AS host_name,
-           (SELECT COUNT(*) FROM room_participants p WHERE p.room_id = r.id AND p.last_seen_at >= ?) AS online_count
-    FROM rooms r
-    LEFT JOIN users u ON u.id = r.host_user_id
-    WHERE r.status = 'live' AND r.access_mode = 'public'
-    ORDER BY r.id DESC
-    LIMIT 12
-");
-$liveSt->execute([Database::cutoff(45)]);
-$liveRooms = $liveSt->fetchAll();
+$me = Auth::currentUser();
+$canHost = Auth::canHost();
 $presets = RoomService::presetLabels();
-$pageTitle = 'اجتماعات فيديو وصوت مفتوحة المصدر ومجانية';
+$pageTitle = 'اجتماعات فيديو وصوت خاصة ومفتوحة المصدر';
 require_once __DIR__ . '/includes/header.php';
 ?>
 
 <section class="vs-hero">
   <div class="vs-container vs-hero-grid">
     <div>
-      <h1>اجتماعات فيديو وصوت مجانية ومفتوحة المصدر</h1>
+      <span class="vs-badge vs-badge-blue" style="margin-bottom:0.85rem;">
+        <i class="fas fa-lock"></i>
+        <span>مساحة اجتماعات مستقلة لكل مضيف — بأسلوب Jitsi</span>
+      </span>
+      <h1>ابدأ اجتماعك الخاص الآن، أو انضم برابط الدعوة</h1>
       <p class="vs-hero-sub">
-        أنشئ اجتماعك أو مجلسك المباشر فوراً وشاركه برابط واحد، أو ادمجه داخل منصتك وموقعك بسهولة تامة وبلا أي تعقيد.
+        أنشئ غرف فيديو وصوت خاصة بك وبفريقك مع تسجيل كامل للاجتماع وسبورة تفاعلية، أو ادمج المنصة داخل مواقعك بخصوصية تامة حيث لكل مضيف غرفه وتسجيلاته المستقلة.
       </p>
       <div class="vs-hero-ctas">
-        <a href="<?php echo Auth::canHost() ? SITE_URL . '/dashboard.php' : SITE_URL . '/register.php'; ?>" class="vs-btn vs-btn-primary">
-          <i class="fas fa-video"></i>
-          <span><?php echo Auth::canHost() ? 'ابدأ اجتماعاً الآن' : 'ابدأ اجتماعاً مجانياً'; ?></span>
-        </a>
-        <a href="#live-rooms" class="vs-btn vs-btn-outline">
-          <i class="fas fa-headphones"></i>
-          <span>الاجتماعات النشطة (<?php echo count($liveRooms); ?>)</span>
-        </a>
+        <?php if ($canHost): ?>
+          <a href="<?php echo SITE_URL; ?>/dashboard.php" class="vs-btn vs-btn-primary">
+            <i class="fas fa-plus"></i>
+            <span>لوحة اجتماعاتي</span>
+          </a>
+          <a href="<?php echo SITE_URL; ?>/embed.php" class="vs-btn vs-btn-outline">
+            <i class="fas fa-code"></i>
+            <span>الدمج في منصتك</span>
+          </a>
+        <?php else: ?>
+          <a href="<?php echo SITE_URL; ?>/register.php" class="vs-btn vs-btn-primary">
+            <i class="fas fa-user-plus"></i>
+            <span>أنشئ حساب مضيف مجاني</span>
+          </a>
+          <a href="<?php echo SITE_URL; ?>/login.php" class="vs-btn vs-btn-outline">
+            <i class="fas fa-sign-in-alt"></i>
+            <span>تسجيل الدخول</span>
+          </a>
+        <?php endif; ?>
       </div>
     </div>
 
+    <!-- Jitsi-Style Two-Tab Launcher Card -->
     <div class="vs-stage-preview">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;margin-bottom:0.9rem;">
-        <div style="display:flex;align-items:center;gap:0.55rem;">
-          <img src="<?php echo SITE_URL; ?>/assets/images/logo-mark.png" alt="Logo" style="width:28px;height:28px;object-fit:contain;">
-          <span style="font-weight:800;font-size:0.96rem;">انضمام سريع برمز الاجتماع</span>
-        </div>
-        <span class="vs-badge vs-badge-live"><span style="width:7px;height:7px;border-radius:50%;background:currentColor;"></span>جاهز الآن</span>
+      <div style="display:flex;gap:0.4rem;background:var(--vs-subtle);padding:0.35rem;border-radius:12px;margin-bottom:1rem;">
+        <button type="button" id="tabBtnStart" onclick="switchLauncherTab('start')" class="vs-btn vs-btn-primary" style="flex:1;height:36px;border-radius:9px;font-size:0.84rem;">بدء اجتماع جديد</button>
+        <button type="button" id="tabBtnJoin" onclick="switchLauncherTab('join')" class="vs-btn vs-btn-outline" style="flex:1;height:36px;border-radius:9px;font-size:0.84rem;border-color:transparent;background:transparent;">انضمام بدعوة</button>
       </div>
-      <form action="<?php echo SITE_URL; ?>/room.php" method="GET" style="display:flex;gap:0.5rem;margin-bottom:1.1rem;">
-        <input type="text" name="code" class="vs-input mono" placeholder="أدخل رمز الاجتماع (مثلاً A7K9P2)" required maxlength="16" style="text-transform:uppercase;">
-        <button type="submit" class="vs-btn vs-btn-primary">دخول</button>
-      </form>
-      <div style="border-top:1px solid var(--vs-border);padding-top:0.95rem;display:grid;grid-template-columns:1fr 1fr;gap:0.65rem;font-size:0.82rem;">
-        <div style="padding:0.65rem;border-radius:12px;background:var(--vs-subtle);">
-          <div style="color:var(--vs-muted);font-size:0.74rem;">متاح للجميع</div>
-          <div style="font-weight:800;margin-top:0.15rem;">مفتوحة المصدر ومجانية</div>
-        </div>
-        <div style="padding:0.65rem;border-radius:12px;background:var(--vs-subtle);">
-          <div style="color:var(--vs-muted);font-size:0.74rem;">مرونة كاملة</div>
-          <div style="font-weight:800;margin-top:0.15rem;">دمج فوري داخل منصاتك</div>
-        </div>
+
+      <!-- Pane 1: Start Instant Private Meeting -->
+      <div id="launcherStartPane">
+        <?php if ($canHost): ?>
+          <form action="<?php echo SITE_URL; ?>/dashboard.php" method="POST" style="display:flex;flex-direction:column;gap:0.75rem;">
+            <input type="hidden" name="csrf_token" value="<?php echo vsEsc(vsCsrfToken()); ?>">
+            <input type="hidden" name="action" value="create_room">
+            <input type="hidden" name="preset" value="meeting">
+            <input type="hidden" name="access_mode" value="code">
+            <div>
+              <label class="vs-label" for="quickTitle">اسم الاجتماع</label>
+              <input id="quickTitle" type="text" name="title" class="vs-input" required placeholder="مثال: اجتماع الفريق الصباحي">
+            </div>
+            <div class="vs-grid-2" style="gap:0.65rem;">
+              <div>
+                <label class="vs-label" for="quickMedia">نوع البث</label>
+                <select id="quickMedia" name="media_mode" class="vs-select">
+                  <option value="video">فيديو وصوت وشاشة</option>
+                  <option value="audio">صوت وسبورة تفاعلية</option>
+                </select>
+              </div>
+              <div>
+                <label class="vs-label" for="quickPass">رمز حماية (اختياري)</label>
+                <input id="quickPass" type="text" name="passcode" class="vs-input mono" maxlength="32" placeholder="بدون رمز">
+              </div>
+            </div>
+            <button type="submit" class="vs-btn vs-btn-primary" style="width:100%;">
+              <i class="fas fa-video"></i>
+              <span>بدء الاجتماع والدخول فوراً</span>
+            </button>
+          </form>
+        <?php else: ?>
+          <div style="text-align:center;padding:0.9rem 0.4rem;">
+            <div style="width:46px;height:46px;border-radius:14px;background:var(--vs-accent-soft);color:var(--vs-accent);display:flex;align-items:center;justify-content:center;margin:0 auto 0.7rem;font-size:1.15rem;">
+              <i class="fas fa-shield-alt"></i>
+            </div>
+            <h3 style="margin:0 0 0.35rem;font-size:1.05rem;">امتلك مساحة اجتماعاتك الخاصة</h3>
+            <p style="margin:0 0 1rem;color:var(--vs-muted);font-size:0.84rem;">سجّل حساب مضيف مجاني خلال ثوانٍ لتحصل على غرف خاصة بك، تحكم كامل، وتسجيل فيديو وصوت.</p>
+            <div style="display:flex;gap:0.55rem;flex-wrap:wrap;justify-content:center;">
+              <a href="<?php echo SITE_URL; ?>/register.php" class="vs-btn vs-btn-primary">إنشاء حساب مضيف</a>
+              <a href="<?php echo SITE_URL; ?>/login.php" class="vs-btn vs-btn-outline">لدي حساب بالفعل</a>
+            </div>
+          </div>
+        <?php endif; ?>
+      </div>
+
+      <!-- Pane 2: Join by Code or Full Invite Link -->
+      <div id="launcherJoinPane" style="display:none;">
+        <form onsubmit="return handleSmartJoin(event)" style="display:flex;flex-direction:column;gap:0.75rem;">
+          <div>
+            <label class="vs-label" for="joinInput">رمز الاجتماع أو رابط الدعوة الكامل</label>
+            <input id="joinInput" type="text" class="vs-input mono" required placeholder="أدخل الرمز مثلاً A7K9P2 أو الصق الرابط...">
+          </div>
+          <button type="submit" class="vs-btn vs-btn-primary" style="width:100%;">
+            <i class="fas fa-arrow-left"></i>
+            <span>الانتقال لغرفة الانتظار (Lobby)</span>
+          </button>
+        </form>
+      </div>
+
+      <!-- Device-Local Private Recent Meetings (Stored only in this browser) -->
+      <div id="localRecentWrap" style="display:none;margin-top:1rem;padding-top:0.85rem;border-top:1px solid var(--vs-border);">
+        <div style="font-size:0.78rem;font-weight:800;color:var(--vs-muted);margin-bottom:0.45rem;">اجتماعاتك الأخيرة على هذا الجهاز</div>
+        <div id="localRecentList" style="display:flex;flex-direction:column;gap:0.35rem;"></div>
       </div>
     </div>
   </div>
 </section>
 
-<section class="vs-container" style="margin-bottom:3rem;">
+<section class="vs-container" style="margin-bottom:2rem;">
   <div class="vs-bento">
     <div class="vs-card vs-bento-wide" style="background:linear-gradient(135deg, var(--vs-accent-soft), var(--vs-surface));">
-      <h2 style="margin:0 0 0.45rem;font-size:1.25rem;">مستقلة بذاتها.. وقابلة للدمج في أي موقع</h2>
-      <p style="margin:0;color:var(--vs-muted);font-size:0.9rem;max-width:60ch;">
-        أنشئ حساب مضيف مجاني وابدأ اجتماعاتك مباشرة من هنا، أو احصل على مفتاح الربط وكود التضمين لتشغيل نفس الغرف داخل أكاديميتك أو متجرك أو موقع فريقك.
+      <h2 style="margin:0 0 0.45rem;font-size:1.25rem;">خصوصية كاملة لكل مضيف.. وقابلية الدمج في أي موقع</h2>
+      <p style="margin:0;color:var(--vs-muted);font-size:0.9rem;max-width:62ch;">
+        لا تُعرض أي غرف خاصة على العامة؛ كل مضيف يدير غرفه وتسجيلاته ومفاتيح الـ API الخاصة به، مع إمكانية حماية أي اجتماع برمز دخول وتضمينه بسطر واحد في منصاتك.
       </p>
     </div>
 
     <div class="vs-card">
       <div style="width:38px;height:38px;border-radius:10px;background:var(--vs-accent-soft);color:var(--vs-accent);display:flex;align-items:center;justify-content:center;margin-bottom:0.75rem;">
-        <i class="fas fa-chalkboard-teacher"></i>
+        <i class="fas fa-film"></i>
       </div>
-      <h3 style="margin:0 0 0.35rem;font-size:1.02rem;">سبورة وشرائح متزامنة</h3>
-      <p style="margin:0;color:var(--vs-muted);font-size:0.84rem;">ارسم واشرح مباشرة مع مؤشر ليزر وعرض الشرائح أمام الحضور في الوقت الفعلي.</p>
+      <h3 style="margin:0 0 0.35rem;font-size:1.02rem;">تسجيل فيديو وصوت كامل</h3>
+      <p style="margin:0;color:var(--vs-muted);font-size:0.84rem;">سجّل الاجتماع فيديو مع الصوت والسبورة، واحفظه في لوحتك الخاصة أو حمّله مباشرة.</p>
     </div>
 
     <div class="vs-card">
       <div style="width:38px;height:38px;border-radius:10px;background:rgba(16,185,129,0.12);color:var(--vs-emerald);display:flex;align-items:center;justify-content:center;margin-bottom:0.75rem;">
-        <i class="fas fa-microphone-alt"></i>
+        <i class="fas fa-key"></i>
       </div>
-      <h3 style="margin:0 0 0.35rem;font-size:1.02rem;">صوت وفيديو فائق النقاء</h3>
-      <p style="margin:0;color:var(--vs-muted);font-size:0.84rem;">تجربة سلسة على أضعف اتصال إنترنت مع نظام رفع اليد وإدارة المداخلات والدردشة والتصويت.</p>
+      <h3 style="margin:0 0 0.35rem;font-size:1.02rem;">غرف خاصة برمز حماية</h3>
+      <p style="margin:0;color:var(--vs-muted);font-size:0.84rem;">صلاحيات المضيف لصاحب الغرفة فقط، مع غرفة انتظار (Lobby) وتصريح دخول برمز حماية.</p>
     </div>
 
     <div class="vs-card vs-bento-wide">
-      <h3 style="margin:0 0 0.75rem;font-size:1.05rem;">تناسب كل الاستخدامات</h3>
+      <h3 style="margin:0 0 0.75rem;font-size:1.05rem;">جاهزة لكل سيناريوهات العمل والتعليم</h3>
       <div class="vs-grid-2">
         <?php foreach ($presets as $pr): ?>
           <div style="padding:0.75rem;border:1px solid var(--vs-border);border-radius:12px;display:flex;align-items:flex-start;gap:0.65rem;">
@@ -109,41 +163,51 @@ require_once __DIR__ . '/includes/header.php';
   </div>
 </section>
 
-<section id="live-rooms" class="vs-container">
-  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;margin-bottom:1rem;">
-    <h2 style="margin:0;font-size:1.28rem;">الاجتماعات العامة النشطة الآن</h2>
-    <a href="<?php echo Auth::isLoggedIn() ? SITE_URL . '/dashboard.php' : SITE_URL . '/login.php'; ?>" class="vs-btn vs-btn-outline">إدارة اجتماعاتي</a>
-  </div>
-
-  <?php if (empty($liveRooms)): ?>
-    <div class="vs-card" style="text-align:center;padding:2.4rem 1.2rem;">
-      <p style="margin:0 0 1rem;color:var(--vs-muted);">لا توجد اجتماعات عامة مفتوحة الآن.</p>
-      <a href="<?php echo Auth::canHost() ? SITE_URL . '/dashboard.php' : SITE_URL . '/register.php'; ?>" class="vs-btn vs-btn-primary">أنشئ اجتماعك الأول مجاناً</a>
-    </div>
-  <?php else: ?>
-    <div class="vs-grid-3">
-      <?php foreach ($liveRooms as $rm):
-        $pInfo = $presets[$rm['preset']] ?? ['title' => $rm['preset']];
-      ?>
-        <div class="vs-card" style="display:flex;flex-direction:column;justify-content:space-between;gap:0.85rem;">
-          <div>
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:0.4rem;margin-bottom:0.55rem;">
-              <span class="vs-badge vs-badge-live">مباشر • <?php echo (int)$rm['online_count']; ?> مشارك</span>
-              <span class="vs-badge vs-badge-blue"><?php echo ($rm['media_mode'] === 'video') ? 'فيديو وصوت' : 'صوت وسبورة'; ?></span>
-            </div>
-            <h3 style="margin:0 0 0.3rem;font-size:1.05rem;"><?php echo vsEsc($rm['title']); ?></h3>
-            <div style="font-size:0.8rem;color:var(--vs-muted);">
-              المضيف: <?php echo vsEsc($rm['host_name'] ?: 'مضيف'); ?> • <?php echo vsEsc($pInfo['title']); ?>
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;padding-top:0.65rem;border-top:1px solid var(--vs-border);">
-            <span class="mono" style="font-size:0.78rem;color:var(--vs-muted);"><?php echo vsEsc($rm['code']); ?></span>
-            <a href="<?php echo SITE_URL; ?>/room.php?code=<?php echo urlencode($rm['code']); ?>" class="vs-btn vs-btn-primary" style="height:34px;padding:0 0.9rem;font-size:0.8rem;">انضمام</a>
-          </div>
-        </div>
-      <?php endforeach; ?>
-    </div>
-  <?php endif; ?>
-</section>
-
+<script>
+function switchLauncherTab(tab) {
+  var isStart = tab === 'start';
+  document.getElementById('launcherStartPane').style.display = isStart ? 'block' : 'none';
+  document.getElementById('launcherJoinPane').style.display = isStart ? 'none' : 'block';
+  var b1 = document.getElementById('tabBtnStart');
+  var b2 = document.getElementById('tabBtnJoin');
+  b1.className = isStart ? 'vs-btn vs-btn-primary' : 'vs-btn vs-btn-outline';
+  b2.className = !isStart ? 'vs-btn vs-btn-primary' : 'vs-btn vs-btn-outline';
+  if (isStart) { b2.style.background = 'transparent'; b2.style.borderColor = 'transparent'; b1.style.background = ''; b1.style.borderColor = ''; }
+  else { b1.style.background = 'transparent'; b1.style.borderColor = 'transparent'; b2.style.background = ''; b2.style.borderColor = ''; }
+}
+function handleSmartJoin(ev) {
+  ev.preventDefault();
+  var raw = (document.getElementById('joinInput').value || '').trim();
+  if (!raw) return false;
+  var m = raw.match(/[?&]code=([a-zA-Z0-9_-]+)/i);
+  var code = m ? m[1] : raw.replace(/[^a-zA-Z0-9_-]/g, '');
+  if (!code) return false;
+  window.location.href = <?php echo json_encode(SITE_URL . '/room.php?code='); ?> + encodeURIComponent(code.toUpperCase());
+  return false;
+}
+(function () {
+  try {
+    var list = JSON.parse(localStorage.getItem('aam_recent_rooms') || '[]');
+    if (!Array.isArray(list) || !list.length) return;
+    var wrap = document.getElementById('localRecentWrap');
+    var box = document.getElementById('localRecentList');
+    wrap.style.display = 'block';
+    list.slice(0, 4).forEach(function (item) {
+      var a = document.createElement('a');
+      a.href = <?php echo json_encode(SITE_URL . '/room.php?code='); ?> + encodeURIComponent(item.code);
+      a.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0.45rem 0.65rem;border-radius:10px;background:var(--vs-subtle);font-size:0.8rem;';
+      var sp1 = document.createElement('span');
+      sp1.style.fontWeight = '700';
+      sp1.textContent = item.title || item.code;
+      var sp2 = document.createElement('span');
+      sp2.className = 'mono';
+      sp2.style.color = 'var(--vs-accent)';
+      sp2.textContent = item.code;
+      a.appendChild(sp1);
+      a.appendChild(sp2);
+      box.appendChild(a);
+    });
+  } catch (e) {}
+})();
+</script>
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

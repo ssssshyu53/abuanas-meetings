@@ -45,18 +45,19 @@ class RoomService
         $mediaMode = ($input['media_mode'] ?? 'audio') === 'video' ? 'video' : 'audio';
         $rawForced = (string)($input['forced_engine'] ?? 'auto');
         $forced = in_array($rawForced, ['auto', 'cf_ws', 'node_relay', 'cf_sfu', 'hms', 'daily', 'livekit'], true) ? $rawForced : 'auto';
-        $rawAccess = (string)($input['access_mode'] ?? 'public');
-        $accessMode = in_array($rawAccess, ['public', 'code', 'registered'], true) ? $rawAccess : 'public';
+        $rawAccess = (string)($input['access_mode'] ?? (!empty($input['is_public']) ? 'public' : 'code'));
+        $accessMode = in_array($rawAccess, ['public', 'code', 'registered'], true) ? $rawAccess : 'code';
+        $passcode = mb_substr(trim((string)($input['passcode'] ?? '')), 0, 32);
         $allowAll = !empty($input['allow_all_mic']) || $preset === 'meeting' ? 1 : 0;
         $wbEnabled = isset($input['whiteboard_enabled']) ? (!empty($input['whiteboard_enabled']) ? 1 : 0) : ($preset === 'classroom' ? 1 : 0);
 
         $code = self::generateUniqueCode($db);
         $now = Database::now();
         $st = $db->prepare("
-            INSERT INTO rooms (code, title, description, preset, media_mode, forced_engine, access_mode, status, allow_all_mic, whiteboard_enabled, host_user_id, started_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'live', ?, ?, ?, ?)
+            INSERT INTO rooms (code, title, description, preset, media_mode, forced_engine, access_mode, passcode, status, allow_all_mic, whiteboard_enabled, host_user_id, started_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'live', ?, ?, ?, ?)
         ");
-        $st->execute([$code, $title, $desc, $preset, $mediaMode, $forced, $accessMode, $allowAll, $wbEnabled, $hostUserId, $now]);
+        $st->execute([$code, $title, $desc, $preset, $mediaMode, $forced, $accessMode, $passcode, $allowAll, $wbEnabled, $hostUserId, $now]);
         return ['ok' => true, 'id' => (int)$db->lastInsertId(), 'code' => $code];
     }
 
@@ -66,7 +67,7 @@ class RoomService
         if ($clean === '') {
             return null;
         }
-        $st = $db->prepare('SELECT r.*, u.name AS host_name FROM rooms r LEFT JOIN users u ON u.id = r.host_user_id WHERE r.code = ? LIMIT 1');
+        $st = $db->prepare('SELECT r.*, u.name AS host_name, u.workspace_name AS host_workspace FROM rooms r LEFT JOIN users u ON u.id = r.host_user_id WHERE r.code = ? LIMIT 1');
         $st->execute([$clean]);
         return $st->fetch() ?: null;
     }

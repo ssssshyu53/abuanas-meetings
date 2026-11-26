@@ -28,24 +28,28 @@ if (session_status() === PHP_SESSION_ACTIVE) {
     session_write_close();
 }
 
+$mediaType = ($_POST['media_type'] ?? 'audio') === 'video' ? 'video' : 'audio';
+$ext = strtolower(trim((string)($_POST['ext'] ?? ($mediaType === 'video' ? 'webm' : 'mp3'))));
+
 if ($action === 'append') {
     if (empty($_FILES['chunk']) || $_FILES['chunk']['error'] !== UPLOAD_ERR_OK) {
         vsJson(422, ['success' => false, 'error' => 'ملف المقطع مفقود']);
     }
-    if ((int)($_FILES['chunk']['size'] ?? 0) > 10 * 1024 * 1024) {
-        vsJson(422, ['success' => false, 'error' => 'حجم مقطع التسجيل يتجاوز الحد المسموح (10MB)']);
+    $maxChunk = ($mediaType === 'video' ? 25 : 10) * 1024 * 1024;
+    if ((int)($_FILES['chunk']['size'] ?? 0) > $maxChunk) {
+        vsJson(422, ['success' => false, 'error' => 'حجم مقطع التسجيل يتجاوز الحد المسموح']);
     }
     $bin = file_get_contents($_FILES['chunk']['tmp_name']);
     if ($bin === false || $bin === '') {
         vsJson(422, ['success' => false, 'error' => 'مقطع فارغ']);
     }
-    $res = RecordingPublisher::appendChunk((int)$room['id'], $bin);
+    $res = RecordingPublisher::appendChunk((int)$room['id'], $bin, $mediaType, $ext);
     vsJson($res['ok'] ? 200 : 422, array_merge(['success' => $res['ok']], $res));
 }
 
 if ($action === 'finalize') {
     $dur = max(0, (int)($_POST['duration_seconds'] ?? 0));
-    $res = RecordingPublisher::finalize($db, $room, $dur);
+    $res = RecordingPublisher::finalize($db, $room, $dur, $mediaType, $ext);
     vsJson(200, array_merge(['success' => true], $res));
 }
 

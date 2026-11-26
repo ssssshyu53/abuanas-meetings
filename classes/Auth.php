@@ -13,10 +13,10 @@ class Auth
             return null;
         }
         $db = Database::getInstance()->connect();
-        $st = $db->prepare('SELECT id, name, email, role, avatar_color, created_at FROM users WHERE id = ? LIMIT 1');
+        $st = $db->prepare('SELECT id, name, workspace_name, email, role, avatar_color, is_active, last_login_at, created_at FROM users WHERE id = ? LIMIT 1');
         $st->execute([$uid]);
         $row = $st->fetch();
-        if (!$row) {
+        if (!$row || (int)($row['is_active'] ?? 1) !== 1) {
             unset($_SESSION['vs_user_id']);
             return null;
         }
@@ -80,19 +80,23 @@ class Auth
         $st->execute([$userId]);
     }
 
-    public static function register(string $name, string $email, string $password, string $accountType = 'member'): array
+    public static function register(string $name, string $email, string $password, string $accountType = 'host', string $workspaceName = ''): array
     {
-        $name = trim($name);
+        $name = mb_substr(trim($name), 0, 100);
+        $workspaceName = mb_substr(trim($workspaceName), 0, 100);
         $email = strtolower(trim($email));
-        $role = $accountType === 'host' ? 'host' : 'member';
+        $role = $accountType === 'member' ? 'member' : 'host';
         if (mb_strlen($name) < 2) {
             return ['ok' => false, 'error' => 'الاسم يجب أن يكون حرفين على الأقل'];
         }
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return ['ok' => false, 'error' => 'البريد الإلكتروني غير صالح'];
         }
-        if (strlen($password) < 6) {
-            return ['ok' => false, 'error' => 'كلمة المرور يجب أن تكون 6 أحرف على الأقل'];
+        if (strlen($password) < 8) {
+            return ['ok' => false, 'error' => 'كلمة المرور يجب أن تكون 8 أحرف على الأقل'];
+        }
+        if ($role === 'host' && $workspaceName === '') {
+            $workspaceName = 'غرفة ' . $name;
         }
 
         $db = Database::getInstance()->connect();
@@ -104,8 +108,8 @@ class Auth
 
         $colors = ['#1D63ED', '#0EA5E9', '#10B981', '#F59E0B', '#6366F1'];
         $color = $colors[array_rand($colors)];
-        $st = $db->prepare('INSERT INTO users (name, email, password_hash, role, avatar_color) VALUES (?, ?, ?, ?, ?)');
-        $st->execute([$name, $email, password_hash($password, PASSWORD_BCRYPT), $role, $color]);
+        $st = $db->prepare('INSERT INTO users (name, workspace_name, email, password_hash, role, avatar_color, is_active, last_login_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?)');
+        $st->execute([$name, $workspaceName, $email, password_hash($password, PASSWORD_BCRYPT), $role, $color, Database::now()]);
         $newId = (int)$db->lastInsertId();
 
         session_regenerate_id(true);
@@ -117,15 +121,51 @@ class Auth
     {
         $email = strtolower(trim($email));
         $db = Database::getInstance()->connect();
-        $st = $db->prepare('SELECT id, password_hash FROM users WHERE email = ? LIMIT 1');
+        $st = $db->prepare('SELECT id, password_hash, is_active FROM users WHERE email = ? LIMIT 1');
         $st->execute([$email]);
         $u = $st->fetch();
         if (!$u || !password_verify($password, (string)$u['password_hash'])) {
             return ['ok' => false, 'error' => 'بيانات الدخول غير صحيحة'];
         }
+        if ((int)($u['is_active'] ?? 1) !== 1) {
+            return ['ok' => false, 'error' => 'تم إيقاف هذا الحساب من قِبل الإدارة'];
+        }
+        $db->prepare('UPDATE users SET last_login_at = ? WHERE id = ?')->execute([Database::now(), (int)$u['id']]);
         session_regenerate_id(true);
         $_SESSION['vs_user_id'] = (int)$u['id'];
         return ['ok' => true, 'user_id' => (int)$u['id']];
+    }
+
+    public static function updateProfile(int $userId, string $name, string $workspaceName): array
+    {
+        $name = mb_substr(trim($name), 0, 100);
+        $workspaceName = mb_substr(trim($workspaceName), 0, 100);
+        if (mb_strlen($name) < 2) {
+            return ['ok' => false, 'error' => 'الاسم يجب أن يكون حرفين على الأقل'];
+        }
+        $db = Database::getInstance()->connect();
+        $db->prepare('UPDATE users SET name = ?, workspace_name = ? WHERE id = ?')->execute([$name, $workspaceName, $userId]);
+        return ['ok' => true];
+    }
+
+    public static function adminCreateUser(string $name, string $workspaceName, string $email, string $password, string $role = 'host'): array
+    {
+        $name = mb_substr(trim($name), 0, 100);
+        $workspaceName = mb_substr(trim($workspaceName), 0, 100);
+        $email = strtolower(trim($email));
+        $role = in_array($role, ['admin', 'host', 'member'], true) ? $role : 'host';
+        if (mb_strlen($name) < 2 || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($password) < 8) {
+            return ['ok' => false, 'error' => 'تأكد من الاسم وبريد صالح وكلمة مرور من 8 أحرف على الأقل'];
+        }
+        $db = Database::getInstance()->connect();
+        $chk = $db->prepare('SELECT id FROM users WHERE email = ? LIMIT 1');
+        $chk->execute([$email]);
+        if ($chk->fetchColumn()) {
+            return ['ok' => false, 'error' => 'هذا البريد مسجل مسبقاً'];
+        }
+        $st = $db->prepare('INSERT INTO users (name, workspace_name, email, password_hash, role, avatar_color, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)');
+        $st->execute([$name, $workspaceName ?: ('غرفة ' . $name), $email, password_hash($password, PASSWORD_BCRYPT), $role, '#1D63ED']);
+        return ['ok' => true, 'user_id' => (int)$db->lastInsertId()];
     }
 
     public static function logout(): void
@@ -173,7 +213,7 @@ class Auth
     {
         $u = self::currentUser();
         if ($u !== null) {
-            $isHost = ((int)$u['id'] === (int)$room['host_user_id']) || ($u['role'] === 'admin');
+            $isHost = ((int)$u['id'] === (int)$room['host_user_id']);
             return [
                 'user_key' => 'u_' . (int)$u['id'],
                 'name'     => (string)$u['name'],
@@ -182,7 +222,7 @@ class Auth
                 'is_guest' => false,
             ];
         }
-        if (($room['access_mode'] ?? 'public') === 'registered') {
+        if (($room['access_mode'] ?? 'code') === 'registered') {
             return null;
         }
         $gName = trim((string)($_SESSION['vs_guest_name'] ?? ''));
@@ -197,5 +237,32 @@ class Auth
             ];
         }
         return null;
+    }
+
+    public static function hasRoomPasscodeAccess(array $room, ?array $actor): bool
+    {
+        $pass = trim((string)($room['passcode'] ?? ''));
+        if ($pass === '') {
+            return true;
+        }
+        if ($actor && !empty($actor['is_host'])) {
+            return true;
+        }
+        $code = strtoupper((string)($room['code'] ?? ''));
+        return !empty($_SESSION['aam_pass_ok'][$code]);
+    }
+
+    public static function verifyRoomPasscode(array $room, string $candidate): bool
+    {
+        $pass = trim((string)($room['passcode'] ?? ''));
+        if ($pass === '') {
+            return true;
+        }
+        if (hash_equals($pass, trim($candidate))) {
+            $code = strtoupper((string)($room['code'] ?? ''));
+            $_SESSION['aam_pass_ok'][$code] = true;
+            return true;
+        }
+        return false;
     }
 }

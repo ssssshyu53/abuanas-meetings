@@ -174,8 +174,64 @@
         await loadScriptOnce('https://cdn.jsdelivr.net/npm/@100mslive/hms-video-store@0.12/dist/index.umd.min.js');
         const HmsSDK = global.HMSReactiveStore;
         const hms = new HmsSDK();
-        this.videoClient = { type: 'hms', actions: hms.getActions(), store: hms.getStore() };
-        await this.videoClient.actions.join({ authToken: v.authToken, userName: this.opts.userName });
+        const actions = hms.getActions();
+        const store = hms.getStore();
+        const selectPeers = global.selectPeers || hms.selectPeers;
+        this.videoClient = { type: 'hms', actions, store, unsub: null };
+
+        if (typeof selectPeers === 'function') {
+          this.videoClient.unsub = store.subscribe((peers) => {
+            if (!Array.isArray(peers)) return;
+            const activeIds = new Set();
+            peers.forEach((p) => {
+              const id = 'hms-' + p.id;
+              activeIds.add(id);
+              let tile = document.getElementById(id);
+              if (p.videoTrack) {
+                if (!tile) {
+                  tile = document.createElement('div');
+                  tile.id = id;
+                  tile.className = 'vs-video-tile';
+                  const vid = document.createElement('video');
+                  vid.autoplay = true;
+                  vid.playsInline = true;
+                  vid.muted = !!p.isLocal;
+                  const lbl = document.createElement('div');
+                  lbl.className = 'vs-video-label';
+                  lbl.textContent = String(p.name || p.id || 'مشارك');
+                  tile.appendChild(vid);
+                  tile.appendChild(lbl);
+                  grid.appendChild(tile);
+                  try { actions.attachVideo(p.videoTrack, vid); } catch {}
+                }
+              } else if (tile) {
+                tile.remove();
+              }
+            });
+            Array.from(grid.querySelectorAll('.vs-video-tile')).forEach((el) => {
+              if (el.id && el.id.startsWith('hms-') && !activeIds.has(el.id)) {
+                el.remove();
+              }
+            });
+          }, selectPeers);
+        }
+
+        try {
+          await actions.join({
+            authToken: v.authToken,
+            userName: this.opts.userName,
+            settings: { isAudioMuted: true, isVideoMuted: auth.role !== 'host' },
+          });
+        } catch (joinErr) {
+          await actions.join({
+            authToken: v.authToken,
+            userName: this.opts.userName,
+            settings: { isAudioMuted: true, isVideoMuted: true },
+          });
+          if (this.opts.onFallbackNotice) {
+            this.opts.onFallbackNotice('تم الانضمام للفيديو بدون كاميرا نشطة.');
+          }
+        }
       } else if (v.provider === 'cf_sfu') {
         // Native RTCPeerConnection brokered via server proxy (zero secret exposure)
         const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }] });

@@ -559,6 +559,76 @@
     await transport.toggleScreenShare(screenOn);
     document.getElementById('hostScreenBtn')?.classList.toggle('gm-active-blue', screenOn);
   };
+
+  const videoRec = global.AbuAnasVideoRecorder ? new global.AbuAnasVideoRecorder({
+    onChunk: async (blob, ext) => {
+      const fd = new FormData();
+      fd.append('action', 'append');
+      fd.append('media_type', 'video');
+      fd.append('ext', ext || 'webm');
+      fd.append('code', cfg.roomCode);
+      fd.append('csrf_token', cfg.csrfToken);
+      fd.append('chunk', blob, 'chunk.' + (ext || 'webm'));
+      await fetch(`${cfg.siteUrl}/api/recording_upload.php`, { method: 'POST', body: fd });
+    },
+    onUserStopped: () => {
+      if (videoRec && videoRec.isRecording()) global.vsToggleVideoRec();
+    },
+  }) : null;
+
+  async function finalizeVideoRecording() {
+    if (!videoRec || !videoRec.isRecording()) return null;
+    const stopRes = await videoRec.stop();
+    document.getElementById('hostVideoRecBtn')?.classList.remove('gm-muted');
+    document.getElementById('videoRecPill')?.classList.add('hidden');
+    const lbl = document.getElementById('hostVideoRecText');
+    if (lbl) lbl.textContent = 'تسجيل فيديو';
+
+    const fd = new FormData();
+    fd.append('action', 'finalize');
+    fd.append('media_type', 'video');
+    fd.append('ext', stopRes.ext || 'webm');
+    fd.append('code', cfg.roomCode);
+    fd.append('csrf_token', cfg.csrfToken);
+    fd.append('duration_seconds', String(stopRes.duration || 1));
+    const res = await fetch(`${cfg.siteUrl}/api/recording_upload.php`, { method: 'POST', body: fd }).then((r) => r.json()).catch(() => ({}));
+    return Object.assign({}, res, { localBlob: stopRes.blob, ext: stopRes.ext });
+  }
+
+  global.vsToggleVideoRec = async () => {
+    if (!videoRec || !videoRec.isSupported()) {
+      Swal.fire({ icon: 'info', title: 'غير مدعوم', text: 'تسجيل الفيديو الكامل يتطلب متصفح سطح مكتب يدعم مشاركة التبويب.' });
+      return;
+    }
+    if (!videoRec.isRecording()) {
+      try {
+        await videoRec.start();
+        document.getElementById('hostVideoRecBtn')?.classList.add('gm-muted');
+        document.getElementById('videoRecPill')?.classList.remove('hidden');
+        const lbl = document.getElementById('hostVideoRecText');
+        if (lbl) lbl.textContent = 'إيقاف الفيديو';
+        Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'بدأ تسجيل الفيديو للاجتماع', timer: 2500, showConfirmButton: false });
+      } catch (err) {
+        Swal.fire({ icon: 'info', title: 'لم يبدأ تسجيل الفيديو', text: err.message || 'تم إلغاء اختيار نافذة الاجتماع.' });
+      }
+    } else {
+      const fin = await finalizeVideoRecording();
+      if (fin && fin.saved) {
+        Swal.fire({
+          icon: 'success',
+          title: 'تم حفظ تسجيل الفيديو!',
+          text: 'يمكنك تشغيله وتحميله من لوحة اجتماعاتك الآن.',
+          showCancelButton: true,
+          confirmButtonText: 'تنزيل النسخة الآن',
+          cancelButtonText: 'حسناً',
+        }).then((ch) => {
+          if (ch.isConfirmed && fin.localBlob) {
+            videoRec.downloadLocal(fin.localBlob, `abuanas-${cfg.roomCode}.${fin.ext || 'webm'}`);
+          }
+        });
+      }
+    }
+  };
   global.vsLeaveRoom = () => {
     ending = true;
     transport.disconnect();
@@ -571,11 +641,12 @@
     window.location.href = cfg.siteUrl + '/index.php';
   };
   global.vsEndRoom = async () => {
-    const ok = await Swal.fire({ title: 'إنهاء وحفظ الجلسة؟', text: 'سيتم إغلاق الغرفة وحفظ التسجيل الصوتي إن وُجد.', icon: 'warning', showCancelButton: true, confirmButtonText: 'إنهاء وحفظ', cancelButtonText: 'تراجع', confirmButtonColor: '#E11D48' });
+    const ok = await Swal.fire({ title: 'إنهاء وحفظ الجلسة؟', text: 'سيتم إغلاق الغرفة وحفظ التسجيل الصوتي والفيديو إن وُجد.', icon: 'warning', showCancelButton: true, confirmButtonText: 'إنهاء وحفظ', cancelButtonText: 'تراجع', confirmButtonColor: '#E11D48' });
     if (!ok.isConfirmed) return;
     ending = true;
     document.getElementById('saveOverlay')?.classList.remove('hidden');
     transport.sendJson({ type: 'session_ended' });
+    await finalizeVideoRecording().catch(() => {});
     audio.stopMic();
     await audio.flushMp3(true);
     const fd = new FormData();
@@ -604,6 +675,11 @@
 
   (async function init() {
     try {
+      try {
+        const prev = JSON.parse(localStorage.getItem('aam_recent_rooms') || '[]');
+        const next = [{ code: cfg.roomCode, title: cfg.roomTitle }].concat((Array.isArray(prev) ? prev : []).filter((x) => x && x.code !== cfg.roomCode)).slice(0, 6);
+        localStorage.setItem('aam_recent_rooms', JSON.stringify(next));
+      } catch {}
       const tokRes = await fetch(`${cfg.siteUrl}/api/room_token.php?code=${encodeURIComponent(cfg.roomCode)}`, { cache: 'no-store' }).then((r) => r.json());
       if (!tokRes || !tokRes.success) return;
       if (tokRes.fallbackReason) {

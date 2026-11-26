@@ -31,7 +31,7 @@ $fieldMap = [
     'cf_ws'      => ['ws_url' => 'رابط Cloudflare Worker WSS (مثل https://...workers.dev أو wss://...)'],
     'node_relay' => ['ws_url' => 'رابط Node.js Relay (محلي ws://127.0.0.1:8788 أو Render wss://...)'],
     'cf_sfu'     => ['app_id' => 'Cloudflare Calls App ID', 'app_secret' => 'Cloudflare App Secret'],
-    'hms'        => ['access_key' => '100ms Access Key', 'app_secret' => '100ms App Secret', 'template_id' => 'Template ID (اختياري)'],
+    'hms'        => ['access_key' => '100ms Access Key', 'app_secret' => '100ms App Secret', 'template_id' => 'Template ID (اختياري)', 'host_role' => 'اسم دور المضيف (مثلاً host)', 'guest_role' => 'اسم دور الضيف (مثلاً guest)'],
     'daily'      => ['api_key' => 'Daily.co REST API Key', 'domain' => 'النطاق (مثل team.daily.co)'],
     'livekit'    => ['ws_url' => 'LiveKit WSS URL', 'api_key' => 'LiveKit API Key', 'api_secret' => 'LiveKit API Secret'],
     'r2'         => ['account_id' => 'CF Account ID', 'access_key' => 'R2 Access Key', 'secret_key' => 'R2 Secret Key', 'bucket' => 'Bucket Name', 'public_url' => 'Public URL (اختياري)'],

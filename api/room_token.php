@@ -24,6 +24,9 @@ $actor = Auth::resolveActor($room);
 if (!$actor) {
     vsJson(401, ['success' => false, 'error' => 'يرجى تسجيل الدخول أو إدخال اسم الضيف للمشاركة']);
 }
+if (!Auth::hasRoomPasscodeAccess($room, $actor)) {
+    vsJson(403, ['success' => false, 'error' => 'هذه الغرفة محمية برمز دخول خاص']);
+}
 
 RoomService::heartbeat($db, (int)$room['id'], $actor);
 $resolved = EngineRouter::resolveForRoom($db, $room, $actor);

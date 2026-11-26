@@ -3,10 +3,13 @@
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
+    workspace_name TEXT NOT NULL DEFAULT '',
     email TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'member',
     avatar_color TEXT NOT NULL DEFAULT '#1D63ED',
+    is_active INTEGER NOT NULL DEFAULT 1,
+    last_login_at TEXT NULL DEFAULT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -30,7 +33,8 @@ CREATE TABLE IF NOT EXISTS rooms (
     media_mode TEXT NOT NULL DEFAULT 'audio',
     forced_engine TEXT NOT NULL DEFAULT 'auto',
     active_engine TEXT DEFAULT NULL,
-    access_mode TEXT NOT NULL DEFAULT 'public',
+    access_mode TEXT NOT NULL DEFAULT 'code',
+    passcode TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'live',
     allow_all_mic INTEGER NOT NULL DEFAULT 0,
     whiteboard_enabled INTEGER NOT NULL DEFAULT 0,
@@ -91,6 +95,7 @@ CREATE TABLE IF NOT EXISTS recordings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     room_id INTEGER NOT NULL,
     title TEXT NOT NULL,
+    media_type TEXT NOT NULL DEFAULT 'audio',
     file_path TEXT NOT NULL DEFAULT '',
     r2_url TEXT NOT NULL DEFAULT '',
     telegram_sent INTEGER NOT NULL DEFAULT 0,

@@ -161,11 +161,14 @@ class EngineRouter
                 'token'    => self::issueLiveKitToken($lkCfg, $roomIdStr, $actor),
             ];
         } elseif ($chosenEngine === 'hms' && !empty($providers['hms'])) {
-            $hmsCfg = $providers['hms']['config'];
-            $res['video'] = [
-                'provider' => 'hms',
-                'authToken'=> self::issue100msToken($hmsCfg, $roomIdStr, $actor),
-            ];
+            $hmsRes = self::create100msSession($providers['hms']['config'], $roomIdStr, $actor);
+            if ($hmsRes['ok']) {
+                $res['video'] = $hmsRes;
+            } else {
+                $res['engine'] = !empty($audioPool['ws_urls']) && isset($providers['cf_ws']) && $providers['cf_ws']['configured'] ? 'cf_ws' : 'node_relay';
+                $res['media_mode'] = 'audio';
+                $res['fallbackReason'] = 'تم التحويل للبث الصوتي والسبورة تلقائياً.';
+            }
         } elseif ($chosenEngine === 'daily' && !empty($providers['daily'])) {
             $dailyRes = self::createDailySession($providers['daily']['config'], $roomIdStr, $actor);
             if ($dailyRes['ok']) {
@@ -204,18 +207,74 @@ class EngineRouter
         return vsGenerateJwt($claims, (string)$cfg['api_secret'], 14400);
     }
 
-    private static function issue100msToken(array $cfg, string $roomId, array $actor): string
+    private static function create100msSession(array $cfg, string $roomSlug, array $actor): array
     {
-        $claims = [
-            'access_key' => (string)$cfg['access_key'],
-            'room_id'    => $roomId,
+        $accessKey = trim((string)($cfg['access_key'] ?? ''));
+        $appSecret = trim((string)($cfg['app_secret'] ?? ''));
+        $templateId = trim((string)($cfg['template_id'] ?? ''));
+        $hostRole = trim((string)($cfg['host_role'] ?? 'host')) ?: 'host';
+        $guestRole = trim((string)($cfg['guest_role'] ?? 'guest')) ?: 'guest';
+
+        if ($accessKey === '' || $appSecret === '' || !function_exists('curl_init')) {
+            return ['ok' => false, 'error' => 'Missing 100ms credentials or cURL'];
+        }
+
+        $mgmtToken = vsGenerateJwt([
+            'access_key' => $accessKey,
+            'type'       => 'management',
+            'version'    => 2,
+            'jti'        => bin2hex(random_bytes(8)),
+        ], $appSecret, 600);
+
+        $headers = ['Authorization: Bearer ' . $mgmtToken, 'Content-Type: application/json'];
+        $payload = ['name' => $roomSlug, 'description' => 'Abu Anas Meetings Room'];
+        if ($templateId !== '') {
+            $payload['template_id'] = $templateId;
+        }
+
+        $ch = curl_init('https://api.100ms.live/v2/rooms');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_TIMEOUT        => 8,
+            CURLOPT_HTTPHEADER     => $headers,
+            CURLOPT_POSTFIELDS     => json_encode($payload, JSON_UNESCAPED_SLASHES),
+        ]);
+        $rBody = (string)curl_exec($ch);
+        $rCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        $rj = json_decode($rBody, true);
+        $hmsRoomId = (string)($rj['id'] ?? '');
+
+        if ($hmsRoomId === '') {
+            $gch = curl_init('https://api.100ms.live/v2/rooms?name=' . urlencode($roomSlug));
+            curl_setopt_array($gch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 6, CURLOPT_HTTPHEADER => $headers]);
+            $gj = json_decode((string)curl_exec($gch), true);
+            curl_close($gch);
+            $hmsRoomId = (string)($gj['data'][0]['id'] ?? '');
+        }
+
+        if ($hmsRoomId === '') {
+            return ['ok' => false, 'error' => 'Could not resolve 100ms room (' . $rCode . ')'];
+        }
+
+        $appToken = vsGenerateJwt([
+            'access_key' => $accessKey,
+            'room_id'    => $hmsRoomId,
             'user_id'    => (string)$actor['user_key'],
-            'role'       => !empty($actor['is_host']) ? 'broadcaster' : 'viewer',
+            'role'       => !empty($actor['is_host']) ? $hostRole : $guestRole,
             'type'       => 'app',
             'version'    => 2,
             'jti'        => bin2hex(random_bytes(8)),
+        ], $appSecret, 14400);
+
+        return [
+            'ok'        => true,
+            'provider'  => 'hms',
+            'roomId'    => $hmsRoomId,
+            'authToken' => $appToken,
         ];
-        return vsGenerateJwt($claims, (string)$cfg['app_secret'], 14400);
     }
 
     private static function createDailySession(array $cfg, string $roomName, array $actor): array

@@ -28,42 +28,72 @@ if (($room['status'] ?? '') === 'ended') {
     exit;
 }
 
-// Guest entry handler (including seamless ?name= auto-join when embedded)
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['guest_action'] ?? '') === 'enter') {
-    if (vsVerifyCsrf()) {
-        Auth::setGuestName((string)($_POST['guest_name'] ?? ''));
-        vsRedirect(SITE_URL . '/room.php?code=' . urlencode($room['code']) . ($isEmbed ? '&embed=1' : ''));
+// Jitsi-style Pre-Join Lobby handler (name + optional passcode verification)
+$lobbyErr = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['lobby_action'] ?? ($_POST['guest_action'] ?? '')) === 'enter') {
+    if (!vsVerifyCsrf()) {
+        $lobbyErr = 'انتهت صلاحية الجلسة، أعد المحاولة.';
+    } else {
+        $passInput = (string)($_POST['room_passcode'] ?? '');
+        if (!Auth::verifyRoomPasscode($room, $passInput)) {
+            $lobbyErr = 'رمز حماية الغرفة غير صحيح.';
+        } else {
+            if (!Auth::isLoggedIn()) {
+                Auth::setGuestName((string)($_POST['guest_name'] ?? ''));
+            }
+            vsRedirect(SITE_URL . '/room.php?code=' . urlencode($room['code']) . ($isEmbed ? '&embed=1' : ''));
+        }
     }
 }
 
 $actor = Auth::resolveActor($room);
-if ($actor === null && $isEmbed && trim((string)($_GET['name'] ?? '')) !== '' && ($room['access_mode'] ?? 'public') !== 'registered') {
+if ($actor === null && $isEmbed && trim((string)($_GET['name'] ?? '')) !== '' && ($room['access_mode'] ?? 'code') !== 'registered') {
     Auth::setGuestName((string)$_GET['name']);
     $actor = Auth::resolveActor($room);
 }
 
-if ($actor === null) {
-    if (($room['access_mode'] ?? 'public') === 'registered') {
+$needsPasscode = !Auth::hasRoomPasscodeAccess($room, $actor);
+if ($actor === null || $needsPasscode) {
+    if ($actor === null && ($room['access_mode'] ?? 'code') === 'registered') {
         vsRedirect(SITE_URL . '/login.php?next=' . urlencode($_SERVER['REQUEST_URI'] ?? SITE_URL));
     }
-    $pageTitle = 'انضمام للاجتماع — ' . $room['title'];
+    $wsBadge = trim((string)($room['host_workspace'] ?? ''));
+    $pageTitle = 'غرفة الانتظار — ' . $room['title'];
     require_once __DIR__ . '/includes/header.php';
     ?>
-    <div class="vs-container" style="padding:3rem 1.25rem;max-width:450px;">
+    <div class="vs-container" style="padding:2.8rem 1.25rem;max-width:460px;">
       <div class="vs-card" style="padding:1.75rem;">
-        <span class="vs-badge vs-badge-live" style="margin-bottom:0.75rem;">اجتماع مباشر • <?php echo vsEsc($room['code']); ?></span>
-        <h1 style="margin:0 0 0.4rem;font-size:1.35rem;"><?php echo vsEsc($room['title']); ?></h1>
-        <p style="margin:0 0 1.2rem;color:var(--vs-muted);font-size:0.86rem;">أدخل اسمك للدخول الفوري إلى الاجتماع.</p>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:wrap;">
+          <span class="vs-badge vs-badge-live">اجتماع مباشر • <?php echo vsEsc($room['code']); ?></span>
+          <?php if ($wsBadge !== ''): ?><span class="vs-badge vs-badge-blue"><?php echo vsEsc($wsBadge); ?></span><?php endif; ?>
+        </div>
+        <h1 style="margin:0 0 0.35rem;font-size:1.35rem;"><?php echo vsEsc($room['title']); ?></h1>
+        <p style="margin:0 0 1.15rem;color:var(--vs-muted);font-size:0.86rem;">
+          <?php echo $needsPasscode ? 'هذه الغرفة محمية برمز دخول خاص من المضيف.' : 'أدخل اسمك الظاهر للاستعداد والدخول إلى الاجتماع.'; ?>
+        </p>
+
+        <?php if ($lobbyErr !== ''): ?>
+          <div style="padding:0.65rem 0.85rem;border-radius:11px;background:rgba(225,29,72,0.12);color:var(--vs-rose);font-size:0.84rem;font-weight:700;margin-bottom:0.9rem;"><?php echo vsEsc($lobbyErr); ?></div>
+        <?php endif; ?>
+
         <form method="POST" style="display:flex;flex-direction:column;gap:0.85rem;">
           <input type="hidden" name="csrf_token" value="<?php echo vsEsc(vsCsrfToken()); ?>">
-          <input type="hidden" name="guest_action" value="enter">
-          <div>
-            <label class="vs-label" for="guestNameInp">الاسم الظاهر</label>
-            <input id="guestNameInp" type="text" name="guest_name" class="vs-input" required maxlength="50" placeholder="اكتب اسمك...">
-          </div>
+          <input type="hidden" name="lobby_action" value="enter">
+          <?php if ($actor === null): ?>
+            <div>
+              <label class="vs-label" for="guestNameInp">الاسم الظاهر</label>
+              <input id="guestNameInp" type="text" name="guest_name" class="vs-input" required maxlength="50" placeholder="اكتب اسمك...">
+            </div>
+          <?php endif; ?>
+          <?php if ($needsPasscode): ?>
+            <div>
+              <label class="vs-label" for="roomPassInp">رمز حماية الغرفة</label>
+              <input id="roomPassInp" type="password" name="room_passcode" class="vs-input mono" required maxlength="32" placeholder="أدخل رمز الدخول...">
+            </div>
+          <?php endif; ?>
           <button type="submit" class="vs-btn vs-btn-primary" style="width:100%;">دخول الاجتماع الآن</button>
         </form>
-        <?php if (!$isEmbed): ?>
+        <?php if (!$isEmbed && $actor === null): ?>
         <div style="margin-top:1rem;font-size:0.8rem;color:var(--vs-muted);text-align:center;">
           لديك حساب؟ <a href="<?php echo SITE_URL; ?>/login.php?next=<?php echo urlencode(SITE_URL . '/room.php?code=' . $room['code']); ?>" style="color:var(--vs-accent);font-weight:700;">تسجيل الدخول</a>
         </div>
@@ -79,6 +109,7 @@ $isHost = !empty($actor['is_host']);
 $initialElapsed = $room['started_at'] ? max(0, time() - strtotime((string)$room['started_at'])) : 0;
 $shareUrl = SITE_URL . '/room.php?code=' . urlencode((string)$room['code']);
 $hostTitleDisplay = (string)($room['host_name'] ?: 'مضيف الاجتماع');
+$hostWorkspace = trim((string)($room['host_workspace'] ?? ''));
 $hostInitial = mb_substr($hostTitleDisplay, 0, 1);
 $csrf = vsCsrfToken();
 $forcedTheme = in_array($_GET['theme'] ?? '', ['light', 'dark'], true) ? $_GET['theme'] : '';
@@ -121,6 +152,8 @@ $forcedTheme = in_array($_GET['theme'] ?? '', ['light', 'dark'], true) ? $_GET['
         <div class="vs-h-meta">
           <span style="display:inline-flex;align-items:center;gap:0.32rem;"><span class="vs-rec-dot"></span><span>مباشر <span id="meetingElapsedTimer" style="font-family:var(--vs-font-mono);"><?php echo gmdate('H:i:s', $initialElapsed); ?></span></span></span>
           <span>• <span id="meetingOnlineCount">1</span> متصل</span>
+          <?php if ($hostWorkspace !== ''): ?><span>• <?php echo vsEsc($hostWorkspace); ?></span><?php endif; ?>
+          <span id="videoRecPill" class="hidden" style="color:var(--vs-rose);font-weight:800;">• <i class="fas fa-circle"></i> تسجيل فيديو</span>
         </div>
       </div>
     </div>
@@ -302,6 +335,11 @@ $forcedTheme = in_array($_GET['theme'] ?? '', ['light', 'dark'], true) ? $_GET['
             <span class="gm-lbl-short">الشاشة</span>
           </button>
           <?php endif; ?>
+          <button type="button" id="hostVideoRecBtn" onclick="vsToggleVideoRec()" class="gm-ctrl-btn">
+            <span class="gm-ctrl-icon"><i class="fas fa-film" style="color:var(--vs-rose);"></i></span>
+            <span class="gm-lbl-full" id="hostVideoRecText">تسجيل فيديو</span>
+            <span class="gm-lbl-short">فيديو</span>
+          </button>
           <button type="button" onclick="vsEndRoom()" class="gm-ctrl-btn gm-end">
             <span class="gm-ctrl-icon"><i class="fas fa-phone-slash"></i></span>
             <span class="gm-lbl-full">إنهاء وحفظ</span>
@@ -398,8 +436,9 @@ window.AAM_ROOM_CONFIG = {
 </script>
 <script src="<?php echo SITE_URL; ?>/assets/js/lame.min.js"></script>
 <script src="<?php echo SITE_URL; ?>/assets/js/audio-engine.js?v=1"></script>
+<script src="<?php echo SITE_URL; ?>/assets/js/video-recorder.js?v=1"></script>
 <script src="<?php echo SITE_URL; ?>/assets/js/whiteboard.js?v=1"></script>
-<script src="<?php echo SITE_URL; ?>/assets/js/engine-adapters.js?v=2"></script>
-<script src="<?php echo SITE_URL; ?>/assets/js/room-app.js?v=3"></script>
+<script src="<?php echo SITE_URL; ?>/assets/js/engine-adapters.js?v=3"></script>
+<script src="<?php echo SITE_URL; ?>/assets/js/room-app.js?v=4"></script>
 </body>
 </html>
