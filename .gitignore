@@ -1,0 +1,35 @@
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Local / Production Databases & Archives
+database/*.sqlite*
+database/*.db*
+*.sqlite
+*.sqlite3
+*.zip
+
+# Logs & OS metadata
+*.log
+error_log
+Thumbs.db
+.DS_Store
+.idea/
+.vscode/
+
+# Dependencies & Wrangler state
+node_modules/
+/node_modules/
+voice-worker/node_modules/
+voice-worker/.wrangler/
+voice-worker/.dev.vars
+voice-relay/node_modules/
+
+# Runtime Uploads (preserve anchors)
+/uploads/recordings/*
+!/uploads/recordings/.gitkeep
+/uploads/slides/*
+!/uploads/slides/.gitkeep

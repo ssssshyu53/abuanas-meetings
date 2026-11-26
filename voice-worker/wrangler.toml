@@ -1,0 +1,11 @@
+name = "abuanas-meetings-worker"
+main = "src/index.js"
+compatibility_date = "2026-01-15"
+
+[[durable_objects.bindings]]
+name = "VOICE_ROOM"
+class_name = "VoiceRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["VoiceRoom"]

@@ -1,0 +1,15 @@
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Block direct web access to secrets, database files, worker source, and logs
+    RewriteRule ^(\.env.*|\.git|database/|voice-worker/|voice-relay/) - [F,L]
+    RewriteRule \.(sqlite|sqlite3|db|sql|log|bak|toml|lock)$ - [F,L]
+    RewriteRule ^package(-lock)?\.json$ - [F,L]
+</IfModule>
+
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>

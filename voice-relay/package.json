@@ -1,0 +1,12 @@
+{
+  "name": "abuanas-meetings-relay",
+  "version": "1.0.0",
+  "description": "Standalone Node.js WebSocket audio & whiteboard relay for Abu Anas Meetings",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
